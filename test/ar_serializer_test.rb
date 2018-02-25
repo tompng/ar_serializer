@@ -63,6 +63,16 @@ class ArSerializerTest < Minitest::Test
     assert_equal expected, ArSerializer.serialize(post, comments: :stars_count_x5)
   end
 
+  def test_count_preloader
+    post = Star.first.comment.post
+    expected = {
+      comments: post.comments.map do |c|
+        { stars_count: c.stars.count }
+      end
+    }
+    assert_equal expected, ArSerializer.serialize(post, comments: :stars_count)
+  end
+
   def test_alias_column
     post = Comment.first.post
     expected = {
@@ -106,6 +116,6 @@ class ArSerializerTest < Minitest::Test
     count, _result = SQLCounts.count do
       ArSerializer.serialize(user, query, context: context)
     end
-    assert_equal 7, count
+    assert_equal 8, count
   end
 end

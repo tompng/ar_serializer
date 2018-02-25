@@ -17,13 +17,10 @@ class Comment < ActiveRecord::Base
   belongs_to :post
   has_many :stars
   serializer_field :id, :body, :user, :stars
+  serializer_field :stars_count, count_of: :stars
 
   define_preloader :star_count_loader do |comments|
     Star.where(comment_id: comments.map(&:id)).group(:comment_id).count
-  end
-
-  serializer_field :stars_count, preload: :star_count_loader do |preloaded|
-    preloaded[id] || 0
   end
 
   serializer_field :stars_count_x5, preload: :star_count_loader do |preloaded|

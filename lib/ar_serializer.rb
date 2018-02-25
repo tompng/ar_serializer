@@ -10,7 +10,15 @@ module ArSerializer
       @_serializer_field_info ||= {}
     end
 
-    def serializer_field(*names, includes: nil, preload: nil, overwrite: true, &data_block)
+    def serializer_field(*names, count_of: nil, includes: nil, preload: nil, overwrite: true, &data_block)
+      if count_of
+        preload ||= lambda do |models|
+          self.joins(count_of).where(id: models.map(&:id)).group(:id).count
+        end
+        data_block ||= lambda do |preloaded, _context, _params|
+          preloaded[id] || 0
+        end
+      end
       if preload
         preloaders = Array(preload).map do |preloader|
           next preloader if preloader.is_a? Proc
