@@ -88,4 +88,24 @@ class ArSerializerTest < Minitest::Test
     ]
     assert_equal expected, ArSerializer.serialize(post, query)
   end
+
+  def test_query_count
+    user = Star.first.comment.post.user
+    query = {
+      posts: {
+        comments: [
+          :stars_count,
+          :stars_count_x5,
+          user: :name,
+          stars: { user: :name },
+          current_user_stars: :id
+        ]
+      }
+    }
+    context = { current_user: Star.first.user }
+    count, _result = SQLCounts.count do
+      ArSerializer.serialize(user, query, context: context)
+    end
+    assert_equal 7, count
+  end
 end
