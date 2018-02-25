@@ -5,7 +5,12 @@ class ArSerializerTest < Minitest::Test
     refute_nil ::ArSerializer::VERSION
   end
 
-  def test_it_does_something_useful
-    assert false
+  def test_field
+    post = Post.first
+    assert_equal(
+      { title: post.title, body: post.body },
+      ArSerializer.serialize(post, [:title, :body])
+    )
   end
+
 end
