@@ -62,4 +62,30 @@ class ArSerializerTest < Minitest::Test
     }
     assert_equal expected, ArSerializer.serialize(post, comments: :stars_count_x5)
   end
+
+  def test_alias_column
+    post = Comment.first.post
+    expected = {
+      TITLE: post.title,
+      body: post.body,
+      COMMENTS: post.comments.map do |c|
+        {
+          id: c.id,
+          BODY: c.body
+        }
+      end
+    }
+    query = [
+      :body,
+      title: { as: :TITLE },
+      comments: {
+        as: :COMMENTS,
+        attributes: [
+          :id,
+          body: { as: :BODY }
+        ]
+      }
+    ]
+    assert_equal expected, ArSerializer.serialize(post, query)
+  end
 end
