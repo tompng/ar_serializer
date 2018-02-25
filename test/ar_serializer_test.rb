@@ -53,4 +53,13 @@ class ArSerializerTest < Minitest::Test
     assert_equal expected, data
   end
 
+  def test_custom_preloader
+    post = Star.first.comment.post
+    expected = {
+      comments: post.comments.map do |c|
+        { stars_count_x5: c.stars.count * 5 }
+      end
+    }
+    assert_equal expected, ArSerializer.serialize(post, comments: :stars_count_x5)
+  end
 end
