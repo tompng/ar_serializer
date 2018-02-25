@@ -6,11 +6,11 @@ module ArSerializer
   extend ActiveSupport::Concern
 
   module ClassMethods
-    def _preloadable_field_info
-      @_preloadable_field_info ||= {}
+    def _serializer_field_info
+      @_serializer_field_info ||= {}
     end
 
-    def preloadable_field(*names, includes: nil, preload: nil, overwrite: true, &data_block)
+    def serializer_field(*names, includes: nil, preload: nil, overwrite: true, &data_block)
       if preload
         preloaders = Array(preload).map do |preloader|
           next preloader if preloader.is_a? Proc
@@ -23,8 +23,8 @@ module ArSerializer
         sub_includes = includes || (name if reflect_on_association(name))
         block = data_block || ->(_context, _params) { send name }
         key = name.to_s
-        next if !overwrite && _preloadable_field_info.key?(key)
-        _preloadable_field_info[key] = {
+        next if !overwrite && _serializer_field_info.key?(key)
+        _serializer_field_info[key] = {
           includes: sub_includes,
           preloaders: preloaders,
           data: block

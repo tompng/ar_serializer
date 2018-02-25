@@ -16,19 +16,19 @@ module ArSerializer::Serializer
   def self._serialize(mixed_value_outputs, args, context, include_id, prefix)
     attributes = args[:attributes]
     mixed_value_outputs.group_by { |v, _o| v.class }.each do |klass, value_outputs|
-      next unless klass.respond_to? :_preloadable_field_info
+      next unless klass.respond_to? :_serializer_field_info
       models = value_outputs.map(&:first)
       attributes.each_key do |name|
         prefixed_name = "#{prefix}#{name}"
-        unless klass._preloadable_field_info.has_key? prefixed_name
-          raise "No preloadable field `#{name}`#{" prefix: #{prefix}" if prefix} for #{klass}"
+        unless klass._serializer_field_info.has_key? prefixed_name
+          raise "No serializer field `#{name}`#{" prefix: #{prefix}" if prefix} for #{klass}"
         end
-        includes = klass._preloadable_field_info[prefixed_name][:includes]
-        preload models, includes if includes.present?
+        includes = klass._serializer_field_info[prefixed_name][:includes]
+        ActiveRecord::Associations::Preloader.new.preload models, includes if includes.present?
       end
 
       preloader_params = attributes.flat_map do |name, sub_args|
-        klass._preloadable_field_info["#{prefix}#{name}"][:preloaders].map do |p|
+        klass._serializer_field_info["#{prefix}#{name}"][:preloaders].map do |p|
           [p, sub_args[:params]]
         end
       end
@@ -46,7 +46,7 @@ module ArSerializer::Serializer
         sub_calls = []
         column_name = sub_arg[:column_name] || name
         prefixed_name = "#{prefix}#{name}"
-        info = klass._preloadable_field_info[prefixed_name]
+        info = klass._serializer_field_info[prefixed_name]
         args = info[:preloaders].map { |p| preloader_values[[p, params]] } || []
         data_block = info[:data]
         value_outputs.each do |value, output|
@@ -71,11 +71,6 @@ module ArSerializer::Serializer
         _serialize sub_calls, sub_arg, context, include_id, prefix if sub_arg[:attributes]
       end
     end
-  end
-
-  def self.preload(*args)
-    @preloader ||= ActiveRecord::Associations::Preloader.new
-    @preloader.preload(*args)
   end
 
   def self.parse_args(args, only_attributes: false)
