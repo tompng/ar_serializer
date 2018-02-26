@@ -1,39 +1,74 @@
 # ArSerializer
 
-Welcome to your new gem! In this directory, you'll find the files you need to be able to package up your Ruby library into a gem. Put your Ruby code in the file `lib/ar_serializer`. To experiment with that code, run `bin/console` for an interactive prompt.
+- JSONの形をclientからリクエストできる
+- N+1 SQLを避ける
 
-TODO: Delete this and the text above, and describe your gem
-
-## Installation
-
-Add this line to your application's Gemfile:
+## Install
 
 ```ruby
-gem 'ar_serializer'
+gem 'ar_serializer', github: 'tompng/ar_serializer'
 ```
 
-And then execute:
+## Field定義
+```ruby
+class User < ActiveRecord::Base
+  has_many :posts
+  serializer_field :id, :name, :posts
+end
 
-    $ bundle
+class Post < ActiveRecord::Base
+  has_many :comments
+  serializer_field :id, :title, :body, :comments
+  serializer_field :comment_count, count_of: :comments
+end
 
-Or install it yourself as:
+class Comment < ActiveRecord::Base
+  serializer_field :id, :body
+end
+```
 
-    $ gem install ar_serializer
+## Serialize
+```ruby
+ArSerializer.serialize user, [:id, :name, posts: [:id, :title, :comment_count]]
+ArSerializer.serialize user, name: { as: 'Name' }
+ArSerializer.serialize Post.limit(10), [:id, :title, :body]
+ArSerializer.serialize Post.find(params[:id]), params[:query]
+```
 
-## Usage
+## その他
+```ruby
+# data block, include
+class Comment
+  serializer_field :user, include: :user do
+    { name: user.name }
+  end
+end
 
-TODO: Write usage instructions here
+# preloader
+class Foo
+  define_preloader :bar_count_loader do |models|
+    {Bar.where(foo_id: models.map(&:id)).group(:foo_id).count
+  end
+  serializer_field :bar_count, preload: (defined_preloader_name or preloader_proc) do |preloaded|
+    preloaded[id] || 0
+  end
+end
 
-## Development
+# context and params
+class Post
+  serializer_field :created_at do |context, params|
+    created_at.in_time_zone(context[:tz]).strftime params[:format]
+  end
+end
+ArSerializer.serialize post, { created_at: { params: { format: '%H:%M:%S' } } }, context: { tz: 'Tokyo' }
 
-After checking out the repo, run `bin/setup` to install dependencies. Then, run `rake test` to run the tests. You can also run `bin/console` for an interactive prompt that will allow you to experiment.
-
-To install this gem onto your local machine, run `bundle exec rake install`. To release a new version, update the version number in `version.rb`, and then run `bundle exec rake release`, which will create a git tag for the version, push git commits and tags, and push the `.gem` file to [rubygems.org](https://rubygems.org).
-
-## Contributing
-
-Bug reports and pull requests are welcome on GitHub at https://github.com/[USERNAME]/ar_serializer.
-
-## License
-
-The gem is available as open source under the terms of the [MIT License](https://opensource.org/licenses/MIT).
+# namespace
+class User
+  serializer_field :name
+  serializer_field :foo, namespace: :admin
+  serializer_field :bar, namespace: :superadmin
+end
+ArSerializer.serialize user, [:name, :foo] #=> Error
+ArSerializer.serialize user, [:name, :foo], use: :admin
+ArSerializer.serialize user, [:name, :foo, :bar], use: [:admin, :superadmin]
+```
