@@ -1,5 +1,4 @@
 require 'active_record'
-ActiveRecord::Base.include ArSerializer
 
 class User < ActiveRecord::Base
   has_many :posts

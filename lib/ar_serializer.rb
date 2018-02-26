@@ -44,3 +44,5 @@ module ArSerializer
     Serializer.serialize(*args)
   end
 end
+
+ActiveRecord::Base.include ArSerializer
