@@ -21,7 +21,7 @@ module ArSerializer
       _serializer_namespace(nil)[name.to_s]
     end
 
-    def serializer_field(*names, count_of: nil, includes: nil, preload: nil, overwrite: true, namespace: nil, &data_block)
+    def serializer_field(*names, count_of: nil, includes: nil, preload: nil, namespace: nil, &data_block)
       namespaces = namespace.is_a?(Array) ? namespace : [namespace]
       namespaces.each do |ns|
         names.each do |name|
