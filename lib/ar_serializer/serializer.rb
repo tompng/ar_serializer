@@ -23,12 +23,12 @@ module ArSerializer::Serializer
         unless klass._serializer_field_info.has_key? prefixed_name
           raise "No serializer field `#{name}`#{" prefix: #{prefix}" if prefix} for #{klass}"
         end
-        includes = klass._serializer_field_info[prefixed_name][:includes]
+        includes = klass._serializer_field_info[prefixed_name].includes
         ActiveRecord::Associations::Preloader.new.preload models, includes if includes.present?
       end
 
       preloader_params = attributes.flat_map do |name, sub_args|
-        klass._serializer_field_info["#{prefix}#{name}"][:preloaders].map do |p|
+        klass._serializer_field_info["#{prefix}#{name}"].preloaders.map do |p|
           [p, sub_args[:params]]
         end
       end
@@ -47,8 +47,8 @@ module ArSerializer::Serializer
         column_name = sub_arg[:column_name] || name
         prefixed_name = "#{prefix}#{name}"
         info = klass._serializer_field_info[prefixed_name]
-        args = info[:preloaders].map { |p| preloader_values[[p, params]] } || []
-        data_block = info[:data]
+        args = info.preloaders.map { |p| preloader_values[[p, params]] } || []
+        data_block = info.data_block
         value_outputs.each do |value, output|
           child = value.instance_exec(*args, context, params, &data_block)
           is_array_of_model = child.is_a?(Array) && child.grep(ActiveRecord::Base).size == child.size
