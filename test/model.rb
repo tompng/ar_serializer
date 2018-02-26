@@ -4,6 +4,10 @@ ActiveRecord::Base.include ArSerializer
 class User < ActiveRecord::Base
   has_many :posts
   serializer_field :id, :name, :posts
+  serializer_field(:foo) { :foo1 }
+  serializer_field(:foo, namespace: :aaa) { :foo2 }
+  serializer_field(:bar, namespace: [:aaa, :bbb]) { :bar }
+  serializer_field(:foobar, namespace: :bbb) { :foobar }
 end
 
 class Post < ActiveRecord::Base

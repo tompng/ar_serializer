@@ -13,6 +13,16 @@ class ArSerializerTest < Minitest::Test
     )
   end
 
+  def test_namespace
+    user = User.first
+    assert_raises { ArSerializer.serialize user, :bar }
+    assert_equal({ bar: :bar }, ArSerializer.serialize(user, :bar, use: :aaa))
+    assert_equal({ bar: :bar }, ArSerializer.serialize(user, :bar, use: :bbb))
+    assert_equal({ foo: :foo1 }, ArSerializer.serialize(user, :foo, use: :bbb))
+    assert_equal({ foo: :foo2 }, ArSerializer.serialize(user, :foo, use: :aaa))
+    assert_equal({ foo: :foo2, foobar: :foobar }, ArSerializer.serialize(user, [:foo, :foobar], use: [:aaa, :bbb]))
+  end
+
   def test_field_specify_modes
     post = Post.first
     expected = { title: post.title }
