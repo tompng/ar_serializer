@@ -55,6 +55,23 @@ class ArSerializer::Field
     )
   end
 
+  def self.parse_order(klass, order)
+    key, mode = begin
+      case order
+      when Hash
+        raise ArgumentError, 'invalid order' unless order.size == 1
+        order.first
+      when Symbol
+        [klass.primary_key, order]
+      when NilClass
+        [klass.primary_key, :asc]
+      end
+    end
+    raise ArgumentError, "invalid order key: #{key}" unless klass.has_attribute? key
+    raise ArgumentError, "invalid order mode: #{mode.inspect}" unless %i[asc desc].include? mode
+    [key, mode]
+  end
+
   def self.association_field(klass, name)
     preloader = lambda do |models, _context, params|
       if params
@@ -63,25 +80,11 @@ class ArSerializer::Field
       end
       return ActiveRecord::Associations::Preloader.new.preload models, name if !limit && !order
       return TopNLoader.load_associations klass, name, limit: params[:limit], order: params[:order] if limit && top_n_loader_available?
-      order_key, order_mode = case order
-      when nil
-        [:id, :asc]
-      when :asc
-        [:id, :asc]
-      when :desc
-        [:id, :desc]
-      when Hash
-        key = order.keys.first
-        mode = order.values.first.to_sym
-        raise unless order.size == 1
-        raise unless klass.has_attribute? key
-        raise unless [:asc, :desc].include? mode
-        [key.to_sym, mode]
-      end
+      order_key, order_mode = parse_order klass, order
       limit = params[:limit].to_i if params[:limit]
       klass.where(id: models.map(&:id)).select(:id).joins(name).map do |r|
         records_nonnils, records_nils = r.send(name).partition(&order_key)
-        records = records_nils + records_nonnils.sort_by(&order_key)
+        records = records_nils.sort_by(&:id) + records_nonnils.sort_by { |r| [r[order_key], r.id] }
         records.reverse! if order_mode == :desc
         [r.id, limit ? records.take(limit) : records]
       end.to_h
