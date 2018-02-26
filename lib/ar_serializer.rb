@@ -7,22 +7,27 @@ module ArSerializer
   extend ActiveSupport::Concern
 
   module ClassMethods
-    def _serializer_field_info
-      @_serializer_field_info ||= {}
+    def _serializer_namespace(ns)
+      (@_serializer_field_info ||= {})[ns] ||= {}
     end
 
-    def serializer_field(*names, count_of: nil, includes: nil, preload: nil, overwrite: true, &data_block)
-      names.each do |name|
-        key = name.to_s
-        next if !overwrite && _serializer_field_info.key?(key)
-        _serializer_field_info[key] = Field.create(
-          self,
-          name,
-          count_of: count_of,
-          includes: includes,
-          preload: preload,
-          &data_block
-        )
+    def _serializer_field_info(name, namespaces: nil)
+      if namespaces
+        Array(namespaces).each do |ns|
+          field = _serializer_namespace(ns)[name.to_s]
+          return field if field
+        end
+      end
+      _serializer_namespace(nil)[name.to_s]
+    end
+
+    def serializer_field(*names, count_of: nil, includes: nil, preload: nil, overwrite: true, namespace: nil, &data_block)
+      namespaces = namespace.is_a?(Array) ? namespace : [namespace]
+      namespaces.each do |ns|
+        names.each do |name|
+          field = Field.create self, name, count_of: count_of, includes: includes, preload: preload, &data_block
+          _serializer_namespace(ns)[name.to_s] = field
+        end
       end
     end
 
