@@ -128,4 +128,11 @@ class ArSerializerTest < Minitest::Test
     end
     assert_equal 8, count
   end
+
+  def test_association_params
+    user = Comment.first.post.user
+    expected = { posts: user.posts.map { |p| { comments: [{ id: p.comments.order(body: :asc).first.id }] } } }
+    data = ArSerializer.serialize(user, posts: { comments: [:id, params: { limit: 1, order: { body: :asc } }] })
+    assert_equal expected, data
+  end
 end

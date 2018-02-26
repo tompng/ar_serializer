@@ -71,12 +71,12 @@ class ArSerializer::Field
       when :desc
         [:id, :desc]
       when Hash
-        key = keys.first
-        mode = values.first.to_sym
-        raise unless keys.size == 1
+        key = order.keys.first
+        mode = order.values.first.to_sym
+        raise unless order.size == 1
         raise unless klass.has_attribute? key
         raise unless [:asc, :desc].include? mode
-        [keys.first.to_sym, mode]
+        [key.to_sym, mode]
       end
       limit = params[:limit].to_i if params[:limit]
       klass.where(id: models.map(&:id)).select(:id).joins(name).map do |r|
