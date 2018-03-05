@@ -89,17 +89,15 @@ class ArSerializer::Field
     end
     if limit && top_n_loader_available?
       return TopNLoader.load_associations klass, models.map(&:id), name, limit: limit, order: order
-    elsif !limit && !order
-      ActiveRecord::Associations::Preloader.new.preload models, name
-      return
     end
+    ActiveRecord::Associations::Preloader.new.preload models, name
+    return if limit.nil? && order.nil?
     order_key, order_mode = parse_order klass, order
-    limit = params[:limit].to_i if params[:limit]
-    klass.where(id: models.map(&:id)).select(:id).joins(name).map do |r|
-      records_nonnils, records_nils = r.send(name).partition(&order_key)
+    models.map do |model|
+      records_nonnils, records_nils = model.send(name).partition(&order_key)
       records = records_nils.sort_by(&:id) + records_nonnils.sort_by { |r| [r[order_key], r.id] }
       records.reverse! if order_mode == :desc
-      [r.id, limit ? records.take(limit) : records]
+      [model.id, limit ? records.take(limit) : records]
     end.to_h
   end
 end
