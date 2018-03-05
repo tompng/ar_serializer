@@ -74,28 +74,32 @@ class ArSerializer::Field
 
   def self.association_field(klass, name)
     preloader = lambda do |models, _context, params|
-      if params
-        limit = params[:limit]&.to_i
-        order = params[:order]
-      end
-      return TopNLoader.load_associations klass, models.map(&:id), name, limit: limit, order: order if limit && top_n_loader_available?
-      return ActiveRecord::Associations::Preloader.new.preload models, name if !limit && !order
-      order_key, order_mode = parse_order klass, order
-      limit = params[:limit].to_i if params[:limit]
-      klass.where(id: models.map(&:id)).select(:id).joins(name).map do |r|
-        records_nonnils, records_nils = r.send(name).partition(&order_key)
-        records = records_nils.sort_by(&:id) + records_nonnils.sort_by { |r| [r[order_key], r.id] }
-        records.reverse! if order_mode == :desc
-        [r.id, limit ? records.take(limit) : records]
-      end.to_h
+      preload_association klass, models, name, params
     end
     data_block = lambda do |preloaded, _context, params|
-      if params && (params[:limit] || params[:order_by])
-        preloaded[id] || []
-      else
-        send name
-      end
+      preloaded ? preloaded[id] || [] : send(name)
     end
     new preloaders: [preloader], data_block: data_block
+  end
+
+  def self.preload_association(klass, models, name, params)
+    if params
+      limit = params[:limit]&.to_i
+      order = params[:order]
+    end
+    if limit && top_n_loader_available?
+      return TopNLoader.load_associations klass, models.map(&:id), name, limit: limit, order: order
+    elsif !limit && !order
+      ActiveRecord::Associations::Preloader.new.preload models, name
+      return
+    end
+    order_key, order_mode = parse_order klass, order
+    limit = params[:limit].to_i if params[:limit]
+    klass.where(id: models.map(&:id)).select(:id).joins(name).map do |r|
+      records_nonnils, records_nils = r.send(name).partition(&order_key)
+      records = records_nils.sort_by(&:id) + records_nonnils.sort_by { |r| [r[order_key], r.id] }
+      records.reverse! if order_mode == :desc
+      [r.id, limit ? records.take(limit) : records]
+    end.to_h
   end
 end
