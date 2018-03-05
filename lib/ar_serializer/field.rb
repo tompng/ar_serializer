@@ -78,7 +78,6 @@ class ArSerializer::Field
         limit = params[:limit]&.to_i
         order = params[:order]
       end
-      p [limit, order]
       return TopNLoader.load_associations klass, models.map(&:id), name, limit: limit, order: order if limit && top_n_loader_available?
       ActiveRecord::Associations::Preloader.new.preload models, name
       return if !limit && !order
