@@ -20,7 +20,7 @@ module ArSerializer::Serializer
       models = value_outputs.map(&:first)
       attributes.each_key do |name|
         field = klass._serializer_field_info name, namespaces: namespaces
-        raise "No serializer field `#{name}`#{" namespaces: #{namespace}" if namespace} for #{klass}" unless field
+        raise "No serializer field `#{name}`#{" namespaces: #{namespaces}" if namespaces} for #{klass}" unless field
         ActiveRecord::Associations::Preloader.new.preload models, field.includes if field.includes.present?
       end
 
