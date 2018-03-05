@@ -79,8 +79,7 @@ class ArSerializer::Field
         order = params[:order]
       end
       return TopNLoader.load_associations klass, models.map(&:id), name, limit: limit, order: order if limit && top_n_loader_available?
-      ActiveRecord::Associations::Preloader.new.preload models, name
-      return if !limit && !order
+      return ActiveRecord::Associations::Preloader.new.preload models, name if !limit && !order
       order_key, order_mode = parse_order klass, order
       limit = params[:limit].to_i if params[:limit]
       klass.where(id: models.map(&:id)).select(:id).joins(name).map do |r|
