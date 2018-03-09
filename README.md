@@ -47,7 +47,7 @@ end
 # preloader
 class Foo
   define_preloader :bar_count_loader do |models|
-    {Bar.where(foo_id: models.map(&:id)).group(:foo_id).count
+    Bar.where(foo_id: models.map(&:id)).group(:foo_id).count
   end
   serializer_field :bar_count, preload: (defined_preloader_name or preloader_proc) do |preloaded|
     preloaded[id] || 0
