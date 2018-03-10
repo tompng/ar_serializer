@@ -21,11 +21,11 @@ module ArSerializer
       _serializer_namespace(nil)[name.to_s]
     end
 
-    def serializer_field(*names, count_of: nil, includes: nil, preload: nil, namespace: nil, &data_block)
+    def serializer_field(*names, association: nil, count_of: nil, includes: nil, preload: nil, namespace: nil, &data_block)
       namespaces = namespace.is_a?(Array) ? namespace : [namespace]
       namespaces.each do |ns|
         names.each do |name|
-          field = Field.create self, name, count_of: count_of, includes: includes, preload: preload, &data_block
+          field = Field.create self, association || name, count_of: count_of, includes: includes, preload: preload, &data_block
           _serializer_namespace(ns)[name.to_s] = field
         end
       end

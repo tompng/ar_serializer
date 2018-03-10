@@ -83,6 +83,13 @@ class ArSerializerTest < Minitest::Test
     assert_equal expected, ArSerializer.serialize(post, comments: :stars_count)
   end
 
+  def test_association_option
+    post = Comment.first.post
+    query1 = { comments: :id }
+    query2 = { cmnts: [:id, as: :comments] }
+    assert_equal ArSerializer.serialize(post, query1), ArSerializer.serialize(post, query2)
+  end
+
   def test_alias_column
     post = Comment.first.post
     expected = {
