@@ -62,14 +62,14 @@ class ArSerializer::Field
         raise ArgumentError, 'invalid order' unless order.size == 1
         order.first
       when Symbol, 'asc', 'desc'
-        [klass.primary_key, order.to_sym]
+        [klass.primary_key, order]
       when NilClass
         [klass.primary_key, :asc]
       end
     end
     raise ArgumentError, "invalid order key: #{key}" unless klass.has_attribute? key
-    raise ArgumentError, "invalid order mode: #{mode.inspect}" unless %i[asc desc].include? mode
-    [key.to_sym, mode]
+    raise ArgumentError, "invalid order mode: #{mode.inspect}" unless [:asc, :desc, 'asc', 'desc'].include? mode
+    [key.to_sym, mode.to_sym]
   end
 
   def self.association_field(klass, name)

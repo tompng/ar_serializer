@@ -69,6 +69,19 @@ module ArSerializer::Serializer
     end
   end
 
+  def self.deep_with_indifferent_access params
+    case params
+    when Array
+      params.map { |v| deep_with_indifferent_access v }
+    when Hash
+      params.with_indifferent_access.transform_values! do |v|
+        deep_with_indifferent_access v
+      end
+    else
+      params
+    end
+  end
+
   def self.parse_args(args, only_attributes: false)
     attributes = {}
     params = nil
@@ -88,7 +101,7 @@ module ArSerializer::Serializer
           elsif sym_key == :attributes
             attributes.update parse_args(value, only_attributes: true)
           elsif sym_key == :params
-            params = value
+            params = deep_with_indifferent_access value
           else
             attributes[sym_key] = parse_args(value)
           end
