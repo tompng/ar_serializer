@@ -54,6 +54,13 @@ class Foo
   end
 end
 
+# order and limits
+class Post
+  has_many :comments
+  serializer_field :comments
+end
+ArSerializer.serialize Post.all, comments: [:id, params: { order: { id: :desc }, limit: 2 }]
+
 # context and params
 class Post
   serializer_field :created_at do |context, params|
