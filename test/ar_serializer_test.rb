@@ -145,4 +145,18 @@ class ArSerializerTest < Minitest::Test
     data2 = ArSerializer.serialize user, JSON.parse(query.to_json)
     assert_equal data, data2
   end
+
+  def test_subclasses
+    p methods.grep(/assert/)
+    klass = Class.new User do
+      self.table_name = :users
+      serializer_field(:gender) { id.even? ? :male : :female }
+    end
+    name_output1 = ArSerializer.serialize(User.first, :name)
+    name_output2 = ArSerializer.serialize(klass.first, :name)
+    assert_equal name_output1, name_output2
+    gender_output = ArSerializer.serialize klass.first, :gender
+    assert_equal({ gender: :female }, gender_output)
+    assert_raises { ArSerializer.serialize User.first, :gender }
+  end
 end

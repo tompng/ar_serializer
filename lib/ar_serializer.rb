@@ -18,7 +18,12 @@ module ArSerializer
           return field if field
         end
       end
-      _serializer_namespace(nil)[name.to_s]
+      field = _serializer_namespace(nil)[name.to_s]
+      if field
+        field
+      elsif superclass < ActiveRecord::Base
+        superclass._serializer_field_info name, namespaces: namespaces
+      end
     end
 
     def serializer_field(*names, association: nil, count_of: nil, includes: nil, preload: nil, namespace: nil, &data_block)
