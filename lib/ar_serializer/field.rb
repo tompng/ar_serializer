@@ -76,7 +76,7 @@ class ArSerializer::Field
     preloader = lambda do |models, _context, params|
       preload_association klass, models, name, params
     end
-    data_block = lambda do |preloaded, _context, params|
+    data_block = lambda do |preloaded, _context, _params|
       preloaded ? preloaded[id] || [] : send(name)
     end
     new preloaders: [preloader], data_block: data_block
