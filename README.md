@@ -29,10 +29,27 @@ end
 
 ## Serialize
 ```ruby
-ArSerializer.serialize user, [:id, :name, posts: [:id, :title, :comment_count]]
-ArSerializer.serialize user, name: { as: 'Name' }
-ArSerializer.serialize Post.limit(10), [:id, :title, :body]
 ArSerializer.serialize Post.find(params[:id]), params[:query]
+```
+
+## Query
+```ruby
+ArSerializer.serialize user, [:id, :name, posts: [:id, :title, :comment_count]]
+# => {
+#   id: 1,
+#   name: "user1",
+#   posts: [
+#     { id: 2, title: "title1", comment_count: 2 },
+#     { id: 3, title: "title2", comment_count: 1 }
+#   ]
+# }
+ArSerializer.serialize posts, [:title, body: { as: :BODY }]
+# => [
+#   { title: "title1", BODY: "body1" },
+#   { title: "title2", BODY: "body2" },
+#   { title: "title3", BODY: "body3" },
+#   { title: "title4", BODY: "body4" }
+# ]
 ```
 
 ## その他
@@ -55,6 +72,7 @@ class Foo
 end
 
 # order and limits
+# add `gem 'top_n_loader', github: 'tompng/top_n_loader'` to your Gemfile
 class Post
   has_many :comments
   serializer_field :comments
