@@ -56,8 +56,8 @@ ArSerializer.serialize posts, [:title, :body, comment_count: { as: :num_replies 
 ```ruby
 # data block, include
 class Comment < ActiveRecord::Base
-  serializer_field :user, includes: :user do
-    { name: user.name }
+  serializer_field :username, includes: :user do
+    { ja: user.name + '先生', en: 'Dr.' + user.name }
   end
 end
 
@@ -66,7 +66,7 @@ class Foo < ActiveRecord::Base
   define_preloader :bar_count_loader do |models|
     Bar.where(foo_id: models.map(&:id)).group(:foo_id).count
   end
-  serializer_field :bar_count, preload: (defined_preloader_name or preloader_proc) do |preloaded|
+  serializer_field :bar_count, preload: preloader_name_or_proc do |preloaded|
     preloaded[id] || 0
   end
 end
