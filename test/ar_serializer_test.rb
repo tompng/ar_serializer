@@ -15,7 +15,7 @@ class ArSerializerTest < Minitest::Test
 
   def test_namespace
     user = User.first
-    assert_raises { ArSerializer.serialize user, :bar }
+    assert_raises(ArSerializer::InvalidQuery) { ArSerializer.serialize user, :bar }
     assert_equal({ bar: :bar }, ArSerializer.serialize(user, :bar, use: :aaa))
     assert_equal({ bar: :bar }, ArSerializer.serialize(user, :bar, use: :bbb))
     assert_equal({ foo: :foo1 }, ArSerializer.serialize(user, :foo, use: :bbb))
@@ -157,6 +157,6 @@ class ArSerializerTest < Minitest::Test
     assert_equal name_output1, name_output2
     gender_output = ArSerializer.serialize klass.first, :gender
     assert_equal({ gender: :female }, gender_output)
-    assert_raises { ArSerializer.serialize User.first, :gender }
+    assert_raises(ArSerializer::InvalidQuery) { ArSerializer.serialize User.first, :gender }
   end
 end

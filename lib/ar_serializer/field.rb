@@ -1,3 +1,5 @@
+require 'ar_serializer/error'
+
 class ArSerializer::Field
   attr_reader :includes, :preloaders, :data_block
   def initialize includes: nil, preloaders: [], data_block:
@@ -28,7 +30,9 @@ class ArSerializer::Field
 
   def self.create(klass, name, count_of:, includes:, preload:, &data_block)
     if count_of
-      raise if includes || preload || data_block
+      if includes || preload || data_block
+        raise ArgumentError, 'includes, preload block cannot be used with count_of'
+      end
       count_field klass, name, count_of
     elsif klass.reflect_on_association(name) && !includes && !preload && !data_block
       association_field klass, name
@@ -41,13 +45,15 @@ class ArSerializer::Field
     if preload
       preloaders = Array(preload).map do |preloader|
         next preloader if preloader.is_a? Proc
-        raise "preloader not found: #{preloader}" unless klass._custom_preloaders.has_key?(preloader)
+        unless klass._custom_preloaders.has_key?(preloader)
+          raise ArgumentError, "preloader not found: #{preloader}"
+        end
         klass._custom_preloaders[preloader]
       end
     end
     preloaders ||= []
     includes ||= name if klass.reflect_on_association name
-    raise if !preloaders.empty? && !data_block
+    raise ArgumentError, 'datablock needed if preloaders are present' if !preloaders.empty? && !data_block
     new(
       includes: includes,
       preloaders: preloaders,
@@ -59,7 +65,7 @@ class ArSerializer::Field
     key, mode = begin
       case order
       when Hash
-        raise ArgumentError, 'invalid order' unless order.size == 1
+        raise ArSerializer::InvalidQuery, 'invalid order' unless order.size == 1
         order.first
       when Symbol, 'asc', 'desc'
         [klass.primary_key, order]
@@ -67,8 +73,8 @@ class ArSerializer::Field
         [klass.primary_key, :asc]
       end
     end
-    raise ArgumentError, "invalid order key: #{key}" unless klass.has_attribute? key
-    raise ArgumentError, "invalid order mode: #{mode.inspect}" unless [:asc, :desc, 'asc', 'desc'].include? mode
+    raise ArSerializer::InvalidQuery, "invalid order key: #{key}" unless klass.has_attribute? key
+    raise ArSerializer::InvalidQuery, "invalid order mode: #{mode.inspect}" unless [:asc, :desc, 'asc', 'desc'].include? mode
     [key.to_sym, mode.to_sym]
   end
 
@@ -87,12 +93,12 @@ class ArSerializer::Field
       limit = params[:limit]&.to_i
       order = params[:order]
     end
+    order_key, order_mode = parse_order klass, order
     if limit && top_n_loader_available?
-      return TopNLoader.load_associations klass, models.map(&:id), name, limit: limit, order: order
+      return TopNLoader.load_associations klass, models.map(&:id), name, limit: limit, order: { order_key => order_mode }
     end
     ActiveRecord::Associations::Preloader.new.preload models, name
     return if limit.nil? && order.nil?
-    order_key, order_mode = parse_order klass, order
     models.map do |model|
       records_nonnils, records_nils = model.send(name).partition(&order_key)
       records = records_nils.sort_by(&:id) + records_nonnils.sort_by { |r| [r[order_key], r.id] }

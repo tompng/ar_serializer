@@ -1,3 +1,5 @@
+require 'ar_serializer/error'
+
 module ArSerializer::Serializer
   def self.serialize(model, args, context: nil, include_id: false, use: nil)
     if model.is_a?(ActiveRecord::Base)
@@ -20,7 +22,7 @@ module ArSerializer::Serializer
       models = value_outputs.map(&:first)
       attributes.each_key do |name|
         field = klass._serializer_field_info name, namespaces: namespaces
-        raise "No serializer field `#{name}`#{" namespaces: #{namespaces}" if namespaces} for #{klass}" unless field
+        raise ArSerializer::InvalidQuery, "No serializer field `#{name}`#{" namespaces: #{namespaces}" if namespaces} for #{klass}" unless field
         ActiveRecord::Associations::Preloader.new.preload models, field.includes if field.includes.present?
       end
 
@@ -107,7 +109,7 @@ module ArSerializer::Serializer
           end
         end
       else
-        raise "Arg type missmatch(Symbol, String or Hash): #{arg}"
+        raise ArSerializer::InvalidQuery, "Arg type missmatch(Symbol, String or Hash): #{arg}"
       end
     end
     return attributes if only_attributes
