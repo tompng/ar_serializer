@@ -8,7 +8,7 @@ class ArSerializer::Field
     @data_block = data_block
   end
 
-  def self.count_field(klass, name, association_name)
+  def self.count_field(klass, association_name)
     preloader = lambda do |models|
       klass.joins(association_name).where(id: models.map(&:id)).group(:id).count
     end
@@ -33,7 +33,7 @@ class ArSerializer::Field
       if includes || preload || data_block
         raise ArgumentError, 'includes, preload block cannot be used with count_of'
       end
-      count_field klass, name, count_of
+      count_field klass, count_of
     elsif klass.reflect_on_association(name) && !includes && !preload && !data_block
       association_field klass, name
     else
