@@ -96,4 +96,17 @@ end
 ArSerializer.serialize user, [:name, :foo] #=> Error
 ArSerializer.serialize user, [:name, :foo], use: :admin
 ArSerializer.serialize user, [:name, :foo, :bar], use: [:admin, :superadmin]
+
+# conditions
+ArSerializer.serialize(
+  user,
+  posts: {
+    as: :draft_posts,
+    params: {
+      condition: { draft: true },
+      order: { created_at: :desc }
+      limit: 5
+    }
+  }
+)
 ```
