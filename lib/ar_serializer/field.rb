@@ -88,22 +88,59 @@ class ArSerializer::Field
     new preloaders: [preloader], data_block: data_block
   end
 
+  def self.sanintize_safe_condition klass, condition
+    return unless condition.is_a? Hash
+    validate_value = lambda do |value|
+      next true if [nil, true, false].include? value
+      next true if [String, Numeric, Symbol, Range].any? { |k| value.is_a? k }
+      value.is_a?(Array) && value.all?(&validate_value)
+    end
+    attributes = Set.new klass.attribute_names
+    condition.select do |key, value|
+      attributes.include?(key.to_s) &&
+        klass._serializer_field_info(key) &&
+        validate_value.call(value)
+    end.presence
+  end
+
   def self.preload_association(klass, models, name, params)
     if params
       limit = params[:limit]&.to_i
       order = params[:order]
     end
     order_key, order_mode = parse_order klass.reflect_on_association(name).klass, order
-    if limit && top_n_loader_available?
-      return TopNLoader.load_associations klass, models.map(&:id), name, limit: limit, order: { order_key => order_mode }
+    if params && params[:condition]
+      ref = klass.reflect_on_association name
+      condition = sanintize_safe_condition ref.klass, params[:condition]
+      raise 'not implemented' if ref.join_keys.foreign_key.to_s != 'id'
+      join_condition = { ref.join_keys.key => models.map(&:id) }
+      records = ref.klass.where(join_condition)
+      records = records.instance_exec(&ref.scope) if ref.scope
+      records = records.where(condition)
     end
-    ActiveRecord::Associations::Preloader.new.preload models, name
-    return if limit.nil? && order.nil?
-    models.map do |model|
-      records_nonnils, records_nils = model.send(name).partition(&order_key)
+    if limit && top_n_loader_available?
+      order_option = { limit: limit, order: { order_key => order_mode } }
+      if condition
+        condition_sql = records.to_sql.scan(/WHERE (.+)/).first
+        raise 'cannot extract where sql' unless condition_sql
+        return TopNLoader.load_groups ref.klass, ref.join_keys.key, models.map(&:id), **order_option, condition: condition_sql
+      else
+        return TopNLoader.load_associations klass, models.map(&:id), name, order_option
+      end
+    end
+    if condition
+      grouped_records = records.group_by(&ref.join_keys.key.to_sym)
+      return grouped_records if limit.nil? && order.nil?
+    else
+      ActiveRecord::Associations::Preloader.new.preload models, name
+      return if limit.nil? && order.nil?
+      grouped_records = models.map { |model| [model.id, model.send(name)] }.to_h
+    end
+    grouped_records.transform_values do |records|
+      records_nonnils, records_nils = records.partition(&order_key)
       records = records_nils.sort_by(&:id) + records_nonnils.sort_by { |r| [r[order_key], r.id] }
       records.reverse! if order_mode == :desc
-      [model.id, limit ? records.take(limit) : records]
+      limit ? records.take(limit) : records
     end.to_h
   end
 end
