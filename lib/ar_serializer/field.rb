@@ -73,7 +73,7 @@ class ArSerializer::Field
         [klass.primary_key, :asc]
       end
     end
-    raise ArSerializer::InvalidQuery, "invalid order key: #{key}" unless klass.has_attribute? key
+    raise ArSerializer::InvalidQuery, "unpermitted order key: #{key}" unless klass.has_attribute?(key) && klass._serializer_field_info(key)
     raise ArSerializer::InvalidQuery, "invalid order mode: #{mode.inspect}" unless [:asc, :desc, 'asc', 'desc'].include? mode
     [key.to_sym, mode.to_sym]
   end
