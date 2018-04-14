@@ -11,7 +11,8 @@ module ArSerializer
       (@_serializer_field_info ||= {})[ns] ||= {}
     end
 
-    def _serializer_field_info(name, namespaces: nil)
+    def _serializer_field_info(name)
+      namespaces = ArSerializer::Serializer.current_namespaces
       if namespaces
         Array(namespaces).each do |ns|
           field = _serializer_namespace(ns)[name.to_s]
@@ -22,7 +23,7 @@ module ArSerializer
       if field
         field
       elsif superclass < ActiveRecord::Base
-        superclass._serializer_field_info name, namespaces: namespaces
+        superclass._serializer_field_info name
       end
     end
 
