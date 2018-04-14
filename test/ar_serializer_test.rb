@@ -146,6 +146,19 @@ class ArSerializerTest < Minitest::Test
     assert_equal data, data2
   end
 
+  def test_order_restriction
+    query = {
+      posts: [
+        :id,
+        params: { order: { created_at: :desc }}
+      ]
+    }
+    ArSerializer.serialize User.all, query, use: :aaa
+    assert_raises(ArSerializer::InvalidQuery) do
+      ArSerializer.serialize User.all, query
+    end
+  end
+
   def test_subclasses
     p methods.grep(/assert/)
     klass = Class.new User do

@@ -93,7 +93,7 @@ class ArSerializer::Field
       limit = params[:limit]&.to_i
       order = params[:order]
     end
-    order_key, order_mode = parse_order klass, order
+    order_key, order_mode = parse_order klass.reflect_on_association(name).klass, order
     if limit && top_n_loader_available?
       return TopNLoader.load_associations klass, models.map(&:id), name, limit: limit, order: { order_key => order_mode }
     end

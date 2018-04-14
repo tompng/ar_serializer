@@ -13,6 +13,7 @@ class Post < ActiveRecord::Base
   belongs_to :user
   has_many :comments
   serializer_field :id, :title, :body, :user, :comments
+  serializer_field :created_at, namespace: :aaa
   serializer_field :cmnts, association: :comments
 end
 
