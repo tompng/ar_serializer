@@ -1,7 +1,7 @@
 require 'ar_serializer/error'
 
 class ArSerializer::CompositeValue
-  def composite
+  def build
     raise 'please overwrite me'
   end
 end
@@ -83,7 +83,7 @@ module ArSerializer::Serializer
               data
             end
           elsif child.is_a? ArSerializer::CompositeValue
-            output, record_elements = child.composite
+            output, record_elements = child.build
             record_elements.each { |o| sub_calls << o }
             output[column_name] = output
           elsif child.is_a? ActiveRecord::Base
