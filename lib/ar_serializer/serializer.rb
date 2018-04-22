@@ -1,5 +1,11 @@
 require 'ar_serializer/error'
 
+class ArSerializer::CompositeValue
+  def composite
+    raise 'please overwrite me'
+  end
+end
+
 module ArSerializer::Serializer
   def self.current_namespaces
     Thread.current[:ar_serializer_current_namespaces]
@@ -56,7 +62,7 @@ module ArSerializer::Serializer
         data_block = info.data_block
         value_outputs.each do |value, output|
           child = value.instance_exec(*args, context, params, &data_block)
-          is_array_of_model = child.is_a?(Array) && child.grep(ActiveRecord::Base).size == child.size
+          is_array_of_model = child.is_a?(Array) && child.all? { |el| el.is_a? ActiveRecord::Base }
           if child.is_a?(ActiveRecord::Relation) || is_array_of_model
             array = []
             child.each do |record|
@@ -65,6 +71,10 @@ module ArSerializer::Serializer
               sub_calls << [record, data]
             end
             output[column_name] = array
+          elsif child.is_a? ArSerializer::CompositeValue
+            output, record_elements = child.composite
+            record_elements.each { |o| sub_calls << o }
+            output[column_name] = output
           elsif child.is_a? ActiveRecord::Base
             data = include_id ? { id: child.id } : {}
             sub_calls << [child, data]
