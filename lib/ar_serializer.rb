@@ -44,6 +44,10 @@ module ArSerializer
     def define_preloader(name, &block)
       _custom_preloaders[name] = block
     end
+
+    def serializer_defaults(*args, &block)
+      serializer_field :defaults, *args, &block
+    end
   end
 
   def self.serialize(*args)
