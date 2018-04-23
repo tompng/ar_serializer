@@ -83,9 +83,9 @@ module ArSerializer::Serializer
               data
             end
           elsif child.is_a? ArSerializer::CompositeValue
-            output, record_elements = child.build
+            sub_output, record_elements = child.build
             record_elements.each { |o| sub_calls << o }
-            output[column_name] = output
+            output[column_name] = sub_output
           elsif child.is_a? ActiveRecord::Base
             data = {}
             sub_calls << [child, data]
