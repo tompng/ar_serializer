@@ -160,7 +160,6 @@ class ArSerializerTest < Minitest::Test
   end
 
   def test_subclasses
-    p methods.grep(/assert/)
     klass = Class.new User do
       self.table_name = :users
       serializer_field(:gender) { id.even? ? :male : :female }
@@ -171,5 +170,28 @@ class ArSerializerTest < Minitest::Test
     gender_output = ArSerializer.serialize klass.first, :gender
     assert_equal({ gender: :female }, gender_output)
     assert_raises(ArSerializer::InvalidQuery) { ArSerializer.serialize User.first, :gender }
+  end
+
+  def test_only_excepts
+    ok_post_queries = [
+      [User.all, { posts_only_title: :title }],
+      [User.all, { posts_only_body: :body }],
+      [Post.all, { user_only_name: :name }],
+      [Post.all, { user_except_posts: :name }]
+    ]
+    error_post_queries = [
+      [User.all, { posts_only_title: :body }],
+      [User.all, { posts_only_body: :title }],
+      [Post.all, { user_only_name: :posts }],
+      [Post.all, { user_except_posts: :posts }]
+    ]
+    ok_post_queries.each do |target, query|
+      ArSerializer.serialize target, query
+    end
+    error_post_queries.each do |target, query|
+      assert_raises ArSerializer::InvalidQuery, query do
+        ArSerializer.serialize target, query
+      end
+    end
   end
 end

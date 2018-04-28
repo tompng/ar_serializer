@@ -13,23 +13,23 @@ module ArSerializer::Serializer
 
   def self.serialize(model, args, context: nil, include_id: false, use: nil)
     Thread.current[:ar_serializer_current_namespaces] = use
+    attributes = parse_args(args)[:attributes]
     if model.is_a?(ActiveRecord::Base)
       output = {}
-      _serialize [[model, output]], parse_args(args), context, include_id
+      _serialize [[model, output]], attributes, context, include_id
       output
     else
       sets = model.to_a.map do |record|
         [record, {}]
       end
-      _serialize sets, parse_args(args), context, include_id
+      _serialize sets, attributes, context, include_id
       sets.map(&:last)
     end
   ensure
     Thread.current[:ar_serializer_current_namespaces] = nil
   end
 
-  def self._serialize(mixed_value_outputs, args, context, include_id)
-    attributes = args[:attributes] || {}
+  def self._serialize(mixed_value_outputs, attributes, context, include_id)
     mixed_value_outputs.group_by { |v, _o| v.class }.each do |klass, value_outputs|
       next unless klass.respond_to? :_serializer_field_info
       models = value_outputs.map(&:first)
@@ -59,9 +59,9 @@ module ArSerializer::Serializer
       end.to_h
 
       if defaults
-        args = defaults.preloaders.map { |p| preloader_values[[p]] } || []
+        preloadeds = defaults.preloaders.map { |p| preloader_values[[p]] } || []
         value_outputs.each do |value, output|
-          data = value.instance_exec(*args, context, nil, &defaults.data_block)
+          data = value.instance_exec(*preloadeds, context, nil, &defaults.data_block)
           output.update data
         end
       end
@@ -71,10 +71,10 @@ module ArSerializer::Serializer
         sub_calls = []
         column_name = sub_arg[:column_name] || name
         info = klass._serializer_field_info name
-        args = info.preloaders.map { |p| preloader_values[[p, params]] } || []
+        preloadeds = info.preloaders.map { |p| preloader_values[[p, params]] } || []
         data_block = info.data_block
         value_outputs.each do |value, output|
-          child = value.instance_exec(*args, context, params, &data_block)
+          child = value.instance_exec(*preloadeds, context, params, &data_block)
           is_array_of_model = child.is_a?(Array) && child.all? { |el| el.is_a? ActiveRecord::Base }
           if child.is_a?(ActiveRecord::Relation) || is_array_of_model
             output[column_name] = child.map do |record|
@@ -94,7 +94,10 @@ module ArSerializer::Serializer
             output[column_name] = child
           end
         end
-        _serialize sub_calls, sub_arg, context, include_id unless sub_calls.empty?
+        next if sub_calls.empty?
+        sub_attributes = sub_arg[:attributes] || {}
+        info.validate_attributes sub_attributes
+        _serialize sub_calls, sub_attributes, context, include_id
       end
     end
   end

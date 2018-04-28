@@ -7,12 +7,16 @@ class User < ActiveRecord::Base
   serializer_field(:foo, namespace: :aaa) { :foo2 }
   serializer_field(:bar, namespace: [:aaa, :bbb]) { :bar }
   serializer_field(:foobar, namespace: :bbb) { :foobar }
+  serializer_field(:posts_only_title, only: :title) { posts }
+  serializer_field(:posts_only_body, only: :body) { posts }
 end
 
 class Post < ActiveRecord::Base
   belongs_to :user
   has_many :comments
   serializer_field :id, :title, :body, :user, :comments
+  serializer_field :user_only_name, association: :user, only: :name
+  serializer_field(:user_except_posts, except: :posts) { user }
   serializer_field :created_at, namespace: :aaa
   serializer_field :cmnts, association: :comments
 end

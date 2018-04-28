@@ -1,11 +1,21 @@
 require 'ar_serializer/error'
 
 class ArSerializer::Field
-  attr_reader :includes, :preloaders, :data_block
-  def initialize includes: nil, preloaders: [], data_block:
+  attr_reader :includes, :preloaders, :data_block, :only, :except
+  def initialize includes: nil, preloaders: [], data_block:, only: nil, except: nil
     @includes = includes
     @preloaders = preloaders
+    @only = [*only].map(&:to_s) if only
+    @except = [*except].map(&:to_s) if except
     @data_block = data_block
+  end
+
+  def validate_attributes(attributes)
+    return unless @only || @except
+    keys = attributes.keys.map(&:to_s)
+    return unless (@only && (keys - @only).present?) || (@except && (keys & @except).present?)
+    invalid_keys = [*(@only && keys - @only), *(@except && keys & @except)].uniq
+    raise ArSerializer::InvalidQuery, "unpermitted attribute: #{invalid_keys}"
   end
 
   def self.count_field(klass, association_name)
@@ -28,20 +38,20 @@ class ArSerializer::Field
     end
   end
 
-  def self.create(klass, name, count_of:, includes:, preload:, &data_block)
+  def self.create(klass, name, count_of:, includes:, preload:, only:, except:, &data_block)
     if count_of
-      if includes || preload || data_block
+      if includes || preload || data_block || only || except
         raise ArgumentError, 'includes, preload block cannot be used with count_of'
       end
       count_field klass, count_of
     elsif klass.reflect_on_association(name) && !includes && !preload && !data_block
-      association_field klass, name
+      association_field klass, name, only: only, except: except
     else
-      custom_field klass, name, includes: includes, preload: preload, &data_block
+      custom_field klass, name, includes: includes, preload: preload, only: only, except: except, &data_block
     end
   end
 
-  def self.custom_field(klass, name, includes:, preload:, &data_block)
+  def self.custom_field(klass, name, includes:, preload:, only:, except:, &data_block)
     if preload
       preloaders = Array(preload).map do |preloader|
         next preloader if preloader.is_a? Proc
@@ -55,8 +65,7 @@ class ArSerializer::Field
     includes ||= name if klass.reflect_on_association name
     raise ArgumentError, 'datablock needed if preloaders are present' if !preloaders.empty? && !data_block
     new(
-      includes: includes,
-      preloaders: preloaders,
+      includes: includes, preloaders: preloaders, only: only, except: except,
       data_block: data_block || ->(_context, _params) { send name }
     )
   end
@@ -78,14 +87,14 @@ class ArSerializer::Field
     [key.to_sym, mode.to_sym]
   end
 
-  def self.association_field(klass, name)
+  def self.association_field(klass, name, only:, except:)
     preloader = lambda do |models, _context, params|
       preload_association klass, models, name, params
     end
     data_block = lambda do |preloaded, _context, _params|
       preloaded ? preloaded[id] || [] : send(name)
     end
-    new preloaders: [preloader], data_block: data_block
+    new preloaders: [preloader], data_block: data_block, only: only, except: except
   end
 
   def self.preload_association(klass, models, name, params)
