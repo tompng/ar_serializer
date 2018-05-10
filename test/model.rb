@@ -36,11 +36,10 @@ class Comment < ActiveRecord::Base
     (preloaded[id] || 0) * 5
   end
 
-  serializer_field :current_user_stars, preload: -> (comments, context) {
-    Star.where(comment_id: comments.map(&:id), user_id: context[:current_user].id).group_by(&:comment_id)
-  } do |preloadeds, _context|
-    preloadeds[id] || []
-  end
+  serializer_field :current_user_stars, preload: lambda { |comments, context|
+    stars = Star.where(comment_id: comments.map(&:id), user_id: context[:current_user].id)
+    Hash.new { [] }.merge stars.group_by(&:comment_id)
+  }
 end
 
 class Star < ActiveRecord::Base
