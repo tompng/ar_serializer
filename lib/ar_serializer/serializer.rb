@@ -34,6 +34,11 @@ module ArSerializer::Serializer
       next unless klass.respond_to? :_serializer_field_info
       models = value_outputs.map(&:first)
       value_outputs.each { |value, output| output[:id] = value.id } if include_id
+      if attributes[:*]
+        all_keys = klass._serializer_field_keys.map(&:to_sym)
+        attributes = all_keys.map { |k| [k, {}] }.to_h.merge attributes
+        attributes.delete :*
+      end
       attributes.each_key do |name|
         field = klass._serializer_field_info name
         raise ArSerializer::InvalidQuery, "No serializer field `#{name}`#{" namespaces: #{current_namespaces}" if current_namespaces} for #{klass}" unless field

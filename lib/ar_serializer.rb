@@ -27,6 +27,19 @@ module ArSerializer
       end
     end
 
+    def _serializer_field_keys
+      namespaces = ArSerializer::Serializer.current_namespaces
+      keys = []
+      if namespaces
+        Array(namespaces).each do |ns|
+          keys |= _serializer_namespace(ns).keys
+        end
+      end
+      keys |= _serializer_namespace(nil).keys
+      keys |= superclass._serializer_field_keys if superclass < ActiveRecord::Base
+      keys
+    end
+
     def serializer_field(*names, association: nil, count_of: nil, includes: nil, preload: nil, namespace: nil, only: nil, except: nil, &data_block)
       namespaces = namespace.is_a?(Array) ? namespace : [namespace]
       namespaces.each do |ns|
