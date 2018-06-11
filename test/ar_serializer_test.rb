@@ -194,4 +194,19 @@ class ArSerializerTest < Minitest::Test
       end
     end
   end
+
+  def test_aster_only_except
+    post = Post.first
+    ['*', :*].each do |aster|
+      data = ArSerializer.serialize post, user: aster
+      data1 = ArSerializer.serialize post, user_except_posts: aster
+      data2 = ArSerializer.serialize post, user_only_name: aster
+      assert_equal post.user.name, data[:user][:name]
+      assert_equal post.user.name, data1[:user_except_posts][:name]
+      assert_equal post.user.name, data2[:user_only_name][:name]
+      assert data[:user].keys.size > 2
+      assert_equal data[:user].keys - [:posts], data1[:user_except_posts].keys
+      assert_equal [:name], data2[:user_only_name].keys
+    end
+  end
 end
