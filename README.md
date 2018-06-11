@@ -34,6 +34,13 @@ ArSerializer.serialize Post.find(params[:id]), params[:query]
 
 ## Query
 ```ruby
+ArSerializer.serialize user, :*
+# => {
+#   id: 1,
+#   name: "user1",
+#   posts: [{}, {}]
+# }
+
 ArSerializer.serialize user, [:id, :name, posts: [:id, :title, comments: :id]]
 # => {
 #   id: 1,
@@ -69,6 +76,7 @@ class Foo < ActiveRecord::Base
   serializer_field :bar_count, preload: preloader_name_or_proc do |preloaded|
     preloaded[id] || 0
   end
+  # data_blockが `do |preloaded| preloaded[id] end` の場合は省略可能
 end
 
 # order and limits
@@ -96,4 +104,14 @@ end
 ArSerializer.serialize user, [:name, :foo] #=> Error
 ArSerializer.serialize user, [:name, :foo], use: :admin
 ArSerializer.serialize user, [:name, :foo, :bar], use: [:admin, :superadmin]
+
+# only, except
+class User < ActiveRecord::Base
+  serializer_field :o_posts, association: :posts, only: :title
+  serializer_field :e_posts, association: :posts, except: :comments
+end
+ArSerializer.serialize user, o_posts: :title, e_posts: :body
+ArSerializer.serialize user, o_posts: :*, e_posts: :*
+ArSerializer.serialize user, o_posts: :body #=> Error
+ArSerializer.serialize user, e_posts: :comments #=> Error
 ```
