@@ -5,8 +5,8 @@ class ArSerializer::Field
   def initialize includes: nil, preloaders: [], data_block:, only: nil, except: nil, order_column: nil
     @includes = includes
     @preloaders = preloaders
-    @only = [*only].map(&:to_s) if only
-    @except = [*except].map(&:to_s) if except
+    @only = only && [*only].map(&:to_s)
+    @except = except && [*except].map(&:to_s)
     @data_block = data_block
     @order_column = order_column
   end
