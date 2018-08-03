@@ -19,6 +19,7 @@ class Post < ActiveRecord::Base
   serializer_field(:user_except_posts, except: :posts) { user }
   serializer_field :created_at, namespace: :aaa
   serializer_field :cmnts, association: :comments
+  serializer_field(:updatedAt, order_column: :updated_at) { updated_at }
 end
 
 class Comment < ActiveRecord::Base

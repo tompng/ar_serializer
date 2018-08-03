@@ -209,4 +209,19 @@ class ArSerializerTest < Minitest::Test
       assert_equal [:name], data2[:user_only_name].keys
     end
   end
+
+  def test_order_by_camelized_field
+    user_id = Post.group(:user_id).count.max_by(&:last).first
+    user = User.find user_id
+    get_target_ids = lambda do
+      ArSerializer.serialize(
+        user.reload,
+        posts: [:id, :updatedAt, params: { order: { updatedAt: :asc } }]
+      )[:posts].map { |post| post[:id] }
+    end
+    user.posts.each do |post|
+      post.update updated_at: rand.days.ago
+    end
+    assert_equal user.posts.order(updated_at: :asc).ids, get_target_ids.call
+  end
 end
