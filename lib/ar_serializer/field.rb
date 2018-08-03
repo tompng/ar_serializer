@@ -1,13 +1,14 @@
 require 'ar_serializer/error'
 
 class ArSerializer::Field
-  attr_reader :includes, :preloaders, :data_block, :only, :except
-  def initialize includes: nil, preloaders: [], data_block:, only: nil, except: nil
+  attr_reader :includes, :preloaders, :data_block, :only, :except, :order_column
+  def initialize includes: nil, preloaders: [], data_block:, only: nil, except: nil, order_column: nil
     @includes = includes
     @preloaders = preloaders
-    @only = [*only].map(&:to_s) if only
-    @except = [*except].map(&:to_s) if except
+    @only = only && [*only].map(&:to_s)
+    @except = except && [*except].map(&:to_s)
     @data_block = data_block
+    @order_column = order_column
   end
 
   def validate_attributes(attributes)
@@ -38,7 +39,7 @@ class ArSerializer::Field
     end
   end
 
-  def self.create(klass, name, count_of:, includes:, preload:, only:, except:, &data_block)
+  def self.create(klass, name, count_of: nil, includes: nil, preload: nil, only: nil, except: nil, order_column: nil, &data_block)
     if count_of
       if includes || preload || data_block || only || except
         raise ArgumentError, 'includes, preload block cannot be used with count_of'
@@ -47,11 +48,11 @@ class ArSerializer::Field
     elsif klass.reflect_on_association(name) && !includes && !preload && !data_block
       association_field klass, name, only: only, except: except
     else
-      custom_field klass, name, includes: includes, preload: preload, only: only, except: except, &data_block
+      custom_field klass, name, includes: includes, preload: preload, only: only, except: except, order_column: order_column, &data_block
     end
   end
 
-  def self.custom_field(klass, name, includes:, preload:, only:, except:, &data_block)
+  def self.custom_field(klass, name, includes:, preload:, only:, except:, order_column:, &data_block)
     if preload
       preloaders = Array(preload).map do |preloader|
         next preloader if preloader.is_a? Proc
@@ -66,7 +67,7 @@ class ArSerializer::Field
     data_block ||= ->(preloaded, _context, _params) { preloaded[id] } if preloaders.size == 1
     raise ArgumentError, 'data_block needed if multiple preloaders are present' if !preloaders.empty? && data_block.nil?
     new(
-      includes: includes, preloaders: preloaders, only: only, except: except,
+      includes: includes, preloaders: preloaders, only: only, except: except, order_column: order_column,
       data_block: data_block || ->(_context, _params) { send name }
     )
   end
@@ -83,7 +84,9 @@ class ArSerializer::Field
         [klass.primary_key, :asc]
       end
     end
-    raise ArSerializer::InvalidQuery, "unpermitted order key: #{key}" unless klass.has_attribute?(key) && klass._serializer_field_info(key)
+    info = klass._serializer_field_info(key)
+    key = info&.order_column || key
+    raise ArSerializer::InvalidQuery, "unpermitted order key: #{key}" unless klass.has_attribute?(key) && info
     raise ArSerializer::InvalidQuery, "invalid order mode: #{mode.inspect}" unless [:asc, :desc, 'asc', 'desc'].include? mode
     [key.to_sym, mode.to_sym]
   end
