@@ -45,7 +45,7 @@ class ArSerializer::Field
         raise ArgumentError, 'includes, preload block cannot be used with count_of'
       end
       count_field klass, count_of
-    elsif klass.reflect_on_association(name) && !includes && !preload && !data_block
+    elsif klass.respond_to?(:reflect_on_association) && klass.reflect_on_association(name) && !includes && !preload && !data_block
       association_field klass, name, only: only, except: except
     else
       custom_field klass, name, includes: includes, preload: preload, only: only, except: except, order_column: order_column, &data_block
@@ -63,7 +63,7 @@ class ArSerializer::Field
       end
     end
     preloaders ||= []
-    includes ||= name if klass.reflect_on_association name
+    includes ||= name if klass.respond_to?(:reflect_on_association) && klass.reflect_on_association(name)
     data_block ||= ->(preloaded, _context, _params) { preloaded[id] } if preloaders.size == 1
     raise ArgumentError, 'data_block needed if multiple preloaders are present' if !preloaders.empty? && data_block.nil?
     new(

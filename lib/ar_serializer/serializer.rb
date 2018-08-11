@@ -1,8 +1,26 @@
 require 'ar_serializer/error'
 
 class ArSerializer::CompositeValue
-  def build
-    raise 'please overwrite me'
+  def initialize(record_elements:, output:)
+    @record_elements = record_elements
+    @output = output
+  end
+
+  def ar_serializer_build_sub_calls
+    [@output, @record_elements]
+  end
+end
+
+module ArSerializer::ArrayLikeCompositeValue
+  def ar_serializer_build_sub_calls
+    output = []
+    record_elements = []
+    each do |record|
+      data = {}
+      output << data
+      record_elements << [record, data]
+    end
+    [output, record_elements]
   end
 end
 
@@ -14,7 +32,7 @@ module ArSerializer::Serializer
   def self.serialize(model, args, context: nil, include_id: false, use: nil)
     Thread.current[:ar_serializer_current_namespaces] = use
     attributes = parse_args(args)[:attributes]
-    if model.is_a?(ActiveRecord::Base)
+    if model.is_a?(ArSerializer::Serializable)
       output = {}
       _serialize [[model, output]], attributes, context, include_id
       output
@@ -82,18 +100,21 @@ module ArSerializer::Serializer
         data_block = info.data_block
         value_outputs.each do |value, output|
           child = value.instance_exec(*preloadeds, context, params, &data_block)
-          is_array_of_model = child.is_a?(Array) && child.all? { |el| el.is_a? ActiveRecord::Base }
-          if child.is_a?(ActiveRecord::Relation) || is_array_of_model
+          if child.is_a?(Array) && child.all? { |el| el.is_a? ArSerializer::Serializable }
             output[column_name] = child.map do |record|
               data = {}
               sub_calls << [record, data]
               data
             end
+          elsif child.respond_to? :ar_serializer_build_sub_calls
+            sub_output, record_elements = child.ar_serializer_build_sub_calls
+            record_elements.each { |o| sub_calls << o }
+            output[column_name] = sub_output
           elsif child.is_a? ArSerializer::CompositeValue
             sub_output, record_elements = child.build
             record_elements.each { |o| sub_calls << o }
             output[column_name] = sub_output
-          elsif child.is_a? ActiveRecord::Base
+          elsif child.is_a? ArSerializer::Serializable
             data = {}
             sub_calls << [child, data]
             output[column_name] = data

@@ -4,6 +4,12 @@ require 'ar_serializer/field'
 require 'active_record'
 
 module ArSerializer
+  def self.serialize(*args)
+    Serializer.serialize(*args)
+  end
+end
+
+module ArSerializer::Serializable
   extend ActiveSupport::Concern
 
   module ClassMethods
@@ -22,7 +28,7 @@ module ArSerializer
       field = _serializer_namespace(nil)[name.to_s]
       if field
         field
-      elsif superclass < ActiveRecord::Base
+      elsif superclass < ArSerializer::Serializable
         superclass._serializer_field_info name
       end
     end
@@ -36,7 +42,7 @@ module ArSerializer
         end
       end
       keys |= _serializer_namespace(nil).keys
-      keys |= superclass._serializer_field_keys if superclass < ActiveRecord::Base
+      keys |= superclass._serializer_field_keys if superclass < ArSerializer::Serializable
       keys
     end
 
@@ -46,7 +52,7 @@ module ArSerializer
       namespaces = namespace.is_a?(Array) ? namespace : [namespace]
       namespaces.each do |ns|
         names.each do |name|
-          field = Field.create self, association || name, option, &data_block
+          field = ArSerializer::Field.create self, association || name, option, &data_block
           _serializer_namespace(ns)[name.to_s] = field
         end
       end
@@ -64,10 +70,7 @@ module ArSerializer
       serializer_field :defaults, *args, &block
     end
   end
-
-  def self.serialize(*args)
-    Serializer.serialize(*args)
-  end
 end
 
-ActiveRecord::Base.include ArSerializer
+ActiveRecord::Base.include ArSerializer::Serializable
+ActiveRecord::Relation.include ArSerializer::ArrayLikeCompositeValue
