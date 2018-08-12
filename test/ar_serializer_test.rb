@@ -161,6 +161,7 @@ class ArSerializerTest < Minitest::Test
 
   def test_subclasses
     klass = Class.new User do
+      def self.name; 'UserSubClass'; end
       self.table_name = :users
       serializer_field(:gender) { id.even? ? :male : :female }
     end

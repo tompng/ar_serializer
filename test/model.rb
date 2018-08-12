@@ -1,4 +1,5 @@
 require 'active_record'
+require_relative '../lib/ar_serializer/graphql.rb'
 
 class User < ActiveRecord::Base
   has_many :posts

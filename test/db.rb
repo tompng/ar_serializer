@@ -1,6 +1,5 @@
 require 'benchmark'
 require 'active_record'
-require_relative 'model'
 
 module DB
   DATABASE_CONFIG = {
