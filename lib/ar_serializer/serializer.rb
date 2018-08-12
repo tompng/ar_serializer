@@ -51,7 +51,7 @@ module ArSerializer::Serializer
     mixed_value_outputs.group_by { |v, _o| v.class }.each do |klass, value_outputs|
       next unless klass.respond_to? :_serializer_field_info
       models = value_outputs.map(&:first)
-      value_outputs.each { |value, output| output[:id] = value.id } if include_id
+      value_outputs.each { |value, output| output[:id] = value.id } if include_id && klass.method_defined?(:id)
       if attributes[:*]
         all_keys = klass._serializer_field_keys.map(&:to_sym)
         all_keys &= only.map(&:to_sym) if only

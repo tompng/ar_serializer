@@ -237,7 +237,7 @@ class ArSerializerTest < Minitest::Test
   end
 
   def test_non_activerecord
-    output = ArSerializer.serialize User.all, favorite_post: [:reason, post: :id]
+    output = ArSerializer.serialize User.all, { favorite_post: [:reason, :post] }, include_id: true
     assert(output.any? { |user| user[:favorite_post] && user[:favorite_post][:post][:id] })
   end
 end
