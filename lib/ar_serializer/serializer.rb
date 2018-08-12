@@ -1,13 +1,13 @@
 require 'ar_serializer/error'
 
 class ArSerializer::CompositeValue
-  def initialize(record_elements:, output:)
-    @record_elements = record_elements
+  def initialize(pairs:, output:)
+    @pairs = pairs
     @output = output
   end
 
   def ar_serializer_build_sub_calls
-    [@output, @record_elements]
+    [@output, @pairs]
   end
 end
 
