@@ -224,4 +224,20 @@ class ArSerializerTest < Minitest::Test
     end
     assert_equal user.posts.order(updated_at: :asc).ids, get_target_ids.call
   end
+
+  def test_non_array_composite_value
+    output = ArSerializer.serialize User.all, posts_with_total: [:id, params: { limit: 2 }]
+    output_ref = ArSerializer.serialize User.all, posts: :id
+    result = output.zip(output_ref).all? do |o, oref|
+      posts_with_total = o[:posts_with_total]
+      posts = oref[:posts]
+      posts_with_total[:total] == posts.size && posts_with_total[:list] == posts.take(2)
+    end
+    assert result
+  end
+
+  def test_non_activerecord
+    output = ArSerializer.serialize User.all, { favorite_post: [:reason, :post] }, include_id: true
+    assert(output.any? { |user| user[:favorite_post] && user[:favorite_post][:post][:id] })
+  end
 end
