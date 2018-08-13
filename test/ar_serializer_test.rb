@@ -240,4 +240,41 @@ class ArSerializerTest < Minitest::Test
     output = ArSerializer.serialize User.all, { favorite_post: [:reason, :post] }, include_id: true
     assert(output.any? { |user| user[:favorite_post] && user[:favorite_post][:post][:id] })
   end
+
+  def test_schema
+    schema = Class.new do
+      def self.name
+        'TestSchema'
+      end
+      include ArSerializer::Serializable
+      serializer_field :user, type: User do |_context, id:|
+        User.find id
+      end
+      serializer_field :users, type: [User] do
+        User.all
+      end
+    end
+    query = %(
+       {
+         user(id: 3) {
+           name
+           PS: posts {
+             id
+             title
+           }
+         }
+         users {
+           id
+           name
+         }
+       }
+    )
+    puts query
+    default_schema = ArSerializer::GraphQL.definition schema
+    aaa_schema = ArSerializer::GraphQL.definition schema, use: :aaa
+    bbb_schema = ArSerializer::GraphQL.definition schema, use: :bbb
+    assert default_schema != aaa_schema
+    assert default_schema != bbb_schema
+    assert aaa_schema != bbb_schema
+  end
 end

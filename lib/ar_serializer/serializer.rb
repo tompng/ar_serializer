@@ -29,22 +29,29 @@ module ArSerializer::Serializer
     Thread.current[:ar_serializer_current_namespaces]
   end
 
-  def self.serialize(model, args, context: nil, include_id: false, use: nil)
-    Thread.current[:ar_serializer_current_namespaces] = use
-    attributes = parse_args(args)[:attributes]
-    if model.is_a?(ArSerializer::Serializable)
-      output = {}
-      _serialize [[model, output]], attributes, context, include_id
-      output
-    else
-      sets = model.to_a.map do |record|
-        [record, {}]
-      end
-      _serialize sets, attributes, context, include_id
-      sets.map(&:last)
-    end
+  def self.with_namespaces(namespaces)
+    namespaces_was = Thread.current[:ar_serializer_current_namespaces]
+    Thread.current[:ar_serializer_current_namespaces] = namespaces
+    yield
   ensure
-    Thread.current[:ar_serializer_current_namespaces] = nil
+    Thread.current[:ar_serializer_current_namespaces] = namespaces_was
+  end
+
+  def self.serialize(model, args, context: nil, include_id: false, use: nil)
+    with_namespaces use do
+      attributes = parse_args(args)[:attributes]
+      if model.is_a?(ArSerializer::Serializable)
+        output = {}
+        _serialize [[model, output]], attributes, context, include_id
+        output
+      else
+        sets = model.to_a.map do |record|
+          [record, {}]
+        end
+        _serialize sets, attributes, context, include_id
+        sets.map(&:last)
+      end
+    end
   end
 
   def self._serialize(mixed_value_outputs, attributes, context, include_id, only = nil, except = nil)

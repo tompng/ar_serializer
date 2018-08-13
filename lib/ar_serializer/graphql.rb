@@ -1,5 +1,8 @@
 module ArSerializer::GraphQL
-  def self.definition(schema_klass)
+  def self.definition(schema_klass, use: nil)
+    ArSerializer::Serializer.with_namespaces(use) { _definition schema_klass }
+  end
+  def self._definition(schema_klass)
     type_name = lambda do |type|
       if type.nil?
         'Any'
