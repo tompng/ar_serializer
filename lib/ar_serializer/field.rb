@@ -44,7 +44,7 @@ class ArSerializer::Field
         end
       end
     end
-    arguments[any] = false if any
+    arguments[:any] = false if any
     arguments
   end
 
