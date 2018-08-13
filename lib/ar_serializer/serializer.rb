@@ -135,7 +135,7 @@ module ArSerializer::Serializer
     when Array
       params.map { |v| deep_with_indifferent_access v }
     when Hash
-      params.with_indifferent_access.transform_values! do |v|
+      params.transform_keys(&:to_sym).transform_values! do |v|
         deep_with_indifferent_access v
       end
     else

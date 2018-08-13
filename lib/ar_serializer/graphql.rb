@@ -51,4 +51,24 @@ module ArSerializer::GraphQL
       #{definitions.join "\n\n"}
     SCHEMA
   end
+
+  def self.serialize(schema, query, use: nil)
+    document = GraphQL::Language::Parser.parse query, filename: nil, tracer: GraphQL::Tracing::NullTracer
+    parse_arguments = lambda do |arguments|
+      arguments.map { |arg| [arg.name, arg.value] }.to_h
+    end
+    parse_query = lambda do |selections|
+      selections.index_by(&:name).transform_values do |selection|
+        {
+          attributes: parse_query.call(selection.selections),
+          params: parse_arguments.call(selection.arguments),
+          as: selection.alias
+        }.compact
+      end
+    end
+    parsed_query = parse_query.call document.definitions.first.selections
+    {
+      data: ArSerializer::Serializer.serialize(schema, parsed_query, use: use)
+    }
+  end
 end

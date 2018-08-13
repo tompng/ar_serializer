@@ -1,6 +1,7 @@
 require 'ar_serializer/version'
 require 'ar_serializer/serializer'
 require 'ar_serializer/field'
+require 'ar_serializer/graphql'
 require 'active_record'
 
 module ArSerializer
