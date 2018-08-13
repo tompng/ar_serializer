@@ -56,22 +56,119 @@ module ArSerializer::GraphQL
   end
 
   def self.serialize(schema, query, use: nil)
-    document = GraphQL::Language::Parser.parse query, filename: nil, tracer: GraphQL::Tracing::NullTracer
-    parse_arguments = lambda do |arguments|
-      arguments.map { |arg| [arg.name, arg.value] }.to_h
-    end
-    parse_query = lambda do |selections|
-      selections.index_by(&:name).transform_values do |selection|
-        {
-          attributes: parse_query.call(selection.selections),
-          params: parse_arguments.call(selection.arguments),
-          as: selection.alias
-        }.compact
-      end
-    end
-    parsed_query = parse_query.call document.definitions.first.selections
+    parsed_query = ArSerializer::GraphQL::QueryParser.parse query
     {
       data: ArSerializer::Serializer.serialize(schema, parsed_query, use: use)
     }
+  end
+end
+
+module ArSerializer::GraphQL::QueryParser
+  def self.parse query
+    chars = query.chars
+    consume_blank = lambda do
+      chars.shift while chars.first == ' ' || chars.first == "\n"
+    end
+    consume_space = lambda do
+      chars.shift while chars.first == ' '
+    end
+    consume_pattern = lambda do |pattern|
+      return unless chars.take(pattern.size).join == pattern
+      chars.shift pattern.size
+      true
+    end
+    parse_name = lambda do
+      name = ''
+      name << chars.shift while chars.first && chars.first =~ /[a-zA-Z0-9_]/
+      name unless name.empty?
+    end
+    parse_name_alias = lambda do
+      name = parse_name.call
+      return unless name
+      consume_space.call
+      if consume_pattern.call ':'
+        consume_space.call
+        [parse_name.call, name]
+      else
+        name
+      end
+    end
+    parse_arg_value = lambda do
+      s = []
+      mode = []
+      loop do
+        c = chars.first
+        case mode.last
+        when '"'
+          if c == '"'
+            mode.pop
+          elsif c == '\\'
+            mode << '\\'
+          end
+        when '\\'
+          mode.pop
+        else
+          break if c == ')'
+          break if mode.empty? && c == ','
+          if '"[{'.include? c
+            mode << c
+          elsif ']}'.include? c
+            mode.pop
+          elsif c == '"'
+            modes << '"'
+          end
+        end
+        s << chars.shift
+      end
+      raise unless mode.empty?
+      JSON.parse s.join
+    end
+    parse_args = lambda do
+      consume_space.call
+      return unless consume_pattern.call '('
+      args = {}
+      loop do
+        consume_blank.call
+        name = parse_name.call
+        break unless name
+        raise unless consume_pattern.call ':'
+        consume_blank.call
+        args[name] = parse_arg_value.call
+        consume_blank.call
+        break unless consume_pattern.call ','
+      end
+      consume_blank.call
+      raise unless consume_pattern.call ')'
+      args
+    end
+    parse_fields = nil
+    parse_field = lambda do
+      name, alias_name = parse_name_alias.call
+      return unless name
+      consume_space.call
+      args = parse_args.call
+      consume_space.call
+      fields = parse_fields.call
+      [name, { as: alias_name, params: args, attributes: fields }.compact]
+    end
+    parse_fields = lambda do
+      consume_blank.call
+      return unless consume_pattern.call '{'
+      consume_blank.call
+      fields = {}
+      loop do
+        name, field = parse_field.call
+        break unless name
+        fields[name] = field
+        consume_blank.call
+      end
+      raise unless consume_pattern.call '}'
+      fields
+    end
+    consume_blank.call
+    fields = parse_fields.call
+    consume_blank.call
+    raise unless chars.empty?
+    fields
   end
 end

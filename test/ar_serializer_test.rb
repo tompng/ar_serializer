@@ -269,12 +269,45 @@ class ArSerializerTest < Minitest::Test
          }
        }
     )
-    puts query
     default_schema = ArSerializer::GraphQL.definition schema
     aaa_schema = ArSerializer::GraphQL.definition schema, use: :aaa
     bbb_schema = ArSerializer::GraphQL.definition schema, use: :bbb
     assert default_schema != aaa_schema
     assert default_schema != bbb_schema
     assert aaa_schema != bbb_schema
+    result = ArSerializer::GraphQL.serialize(schema.new, query).as_json
+    assert result['data']['user']['PS']
+  end
+
+  def test_graphql_query_parse
+    random_json = lambda do |level|
+      chars = %("\\{[]},0a).chars
+      if level <= 0
+        [
+          Array.new(10) { chars.sample }.join,
+          rand(10),
+          true,
+          false
+        ].sample
+      elsif rand < 0.5
+        Array.new(4) { random_json.call rand(level) }
+      else
+        Array.new 4 do
+          [Array.new(4) { chars.sample }.join, random_json.call(rand(level))]
+        end.to_h
+        Array.new 4 do
+          [Array.new(4) { chars.sample }.join, 'aaa']
+        end
+      end
+    end
+    query = %(
+      {
+        user(aa: #{random_json.call(4).to_json}) {
+          foo()
+          bar(aa: #{random_json.call(4).to_json}, bb: #{random_json.call(4).to_json})
+        }
+      }
+    )
+    ArSerializer::GraphQL::QueryParser.parse query
   end
 end
