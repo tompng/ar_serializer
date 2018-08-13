@@ -46,13 +46,11 @@ module ArSerializer::Serializable
       keys
     end
 
-    def serializer_field(*names, **option, &data_block)
-      namespace = option.delete :namespace
-      association = option.delete :association
+    def serializer_field(*names, namespace: nil, association: nil, **option, &data_block)
       namespaces = namespace.is_a?(Array) ? namespace : [namespace]
       namespaces.each do |ns|
         names.each do |name|
-          field = ArSerializer::Field.create self, association || name, option, &data_block
+          field = ArSerializer::Field.create(self, association || name, option, &data_block)
           _serializer_namespace(ns)[name.to_s] = field
         end
       end
