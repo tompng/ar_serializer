@@ -182,7 +182,7 @@ class ArSerializer::Field
     new preloaders: [preloader], data_block: data_block, only: only, except: except, type: type
   end
 
-  def self.preload_association(klass, models, name, limit:, order:)
+  def self.preload_association(klass, models, name, limit: nil, order: nil)
     limit = limit&.to_i
     order_key, order_mode = parse_order klass.reflect_on_association(name).klass, order
     if limit && top_n_loader_available?

@@ -84,16 +84,16 @@ module ArSerializer::Serializer
       preloader_values = preloader_params.compact.uniq.map do |key|
         preloader, params = key
         if preloader.arity < 0
-          [key, preloader.call(models, context, params)]
+          [key, preloader.call(models, context, params || {})]
         else
-          [key, preloader.call(*[models, context, params].take(preloader.arity))]
+          [key, preloader.call(*[models, context, params || {}].take(preloader.arity))]
         end
       end.to_h
 
       if defaults
         preloadeds = defaults.preloaders.map { |p| preloader_values[[p]] } || []
         value_outputs.each do |value, output|
-          data = value.instance_exec(*preloadeds, context, nil, &defaults.data_block)
+          data = value.instance_exec(*preloadeds, context, {}, &defaults.data_block)
           output.update data
         end
       end
@@ -106,7 +106,7 @@ module ArSerializer::Serializer
         preloadeds = info.preloaders.map { |p| preloader_values[[p, params]] } || []
         data_block = info.data_block
         value_outputs.each do |value, output|
-          child = value.instance_exec(*preloadeds, context, params, &data_block)
+          child = value.instance_exec(*preloadeds, context, params || {}, &data_block)
           if child.is_a?(Array) && child.all? { |el| el.is_a? ArSerializer::Serializable }
             output[column_name] = child.map do |record|
               data = {}
@@ -179,6 +179,6 @@ module ArSerializer::Serializer
       end
     end
     return attributes if only_attributes
-    { attributes: attributes, column_name: column_name, params: params }
+    { attributes: attributes, column_name: column_name, params: params || {} }
   end
 end
