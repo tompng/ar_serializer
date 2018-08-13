@@ -63,7 +63,7 @@ class ArSerializer::Field
     data_block = lambda do |preloaded, _context, _params|
       preloaded[id] || 0
     end
-    new preloaders: [preloader], data_block: data_block, type: :integer
+    new preloaders: [preloader], data_block: data_block, type: :int
   end
 
   def self.top_n_loader_available?
@@ -76,6 +76,41 @@ class ArSerializer::Field
     end
   end
 
+  def self.type_from_column_type(klass, name)
+    column = klass.column_for_attribute name
+    type = type_from_attribute_type klass, name.to_s
+    if type.nil? || column.null
+      type
+    else
+      :"#{type}!"
+    end
+  end
+
+  def self.type_from_attribute_type(klass, name)
+    attr_type = klass.attribute_types[name]
+    if attr_type.is_a?(ActiveRecord::Enum::EnumType) && respond_to?(name.pluralize)
+      classes = send(name.pluralize).keys.map(&:class).compact.uniq
+      return if classes.empty?
+      return :boolean if ([TrueClass, FalseClass] - classes).empty?
+      return :string if ([String, Symbol] - classes).empty?
+      return :int if classes == [Integer]
+      return :float if classes.all? { |k| k < Numeric }
+    end
+    {
+      boolean: :boolean,
+      integer: :int,
+      float: :float,
+      decimal: :float,
+      string: :string,
+      text: :string,
+      json: :string,
+      binary: :string,
+      time: :string,
+      date: :string,
+      datetime: :string
+    }[attr_type.type]
+  end
+
   def self.create(klass, name, type: nil, count_of: nil, includes: nil, preload: nil, only: nil, except: nil, order_column: nil, &data_block)
     if count_of
       if includes || preload || data_block || only || except || type
@@ -85,10 +120,16 @@ class ArSerializer::Field
     end
     association = klass.reflect_on_association name if klass.respond_to? :reflect_on_association
     if association
-      type ||= -> { association.collection? ? association : association.klass }
+      type ||= -> { association.collection? ? [association.klass] : association.klass }
       return association_field klass, name, only: only, except: except, type: type if !includes && !preload && !data_block
     end
-    type ||= -> { klass.attribute_types[name.to_s].type } if klass.respond_to? :attribute_types
+    type ||= lambda do
+      if klass.respond_to? :column_for_attribute
+        type_from_column_type klass, name
+      elsif klass.respond_to? :attribute_types
+        type_from_attribute_type klass, name.to_s
+      end
+    end
     custom_field klass, name, includes: includes, preload: preload, only: only, except: except, order_column: order_column, type: type, &data_block
   end
 
@@ -156,4 +197,52 @@ class ArSerializer::Field
       [model.id, limit ? records.take(limit) : records]
     end.to_h
   end
+end
+
+
+def serializable_to_schema(klass)
+  type_name = lambda do |type|
+    if type.nil?
+      'Any'
+    elsif type.is_a?(Array)
+      "[#{type_name.call type.first}]"
+    elsif %i[int int! float float! boolean boolean! string string!].include? type
+      type.to_s.camelize
+    elsif type.is_a?(Class) && type < ArSerializer::Serializable
+      type.name.delete ':'
+    else
+      raise "invalid type: #{type.class}: #{type}"
+    end
+  end
+  extract_schema = lambda do |klass|
+    fields = []
+    types = []
+    klass._serializer_field_keys.each do |name|
+      field = klass._serializer_field_info name
+      type = field.type
+      types << (type.is_a?(Array) ? type.first : type)
+      arguments = field.arguments
+      unless arguments.empty?
+        arg_types = arguments.map { |key, req| "#{key}: Any#{req ? '!' : ''}"  }
+        arg = "(#{arg_types.join ', '})"
+      end
+      fields << "  #{name}#{arg}: #{type_name.call type}"
+    end
+    schema = ["type #{type_name.call klass} {", fields, '}'].join "\n"
+    [schema, types]
+  end
+  defined_types = {}
+  types = [klass]
+  schemas = []
+  schemas << 'scalar Any'
+  until types.empty?
+    type = types.shift
+    next if defined_types[type]
+    next unless type.is_a?(Class) && type < ArSerializer::Serializable
+    defined_types[type] = true
+    schema, sub_types = extract_schema.call type
+    schemas << schema
+    types += sub_types
+  end
+  schemas.join "\n\n"
 end
