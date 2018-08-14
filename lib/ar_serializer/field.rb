@@ -2,7 +2,7 @@ require 'ar_serializer/error'
 
 class ArSerializer::Field
   attr_reader :includes, :preloaders, :data_block, :only, :except, :order_column
-  def initialize includes: nil, preloaders: [], data_block:, only: nil, except: nil, order_column: nil, type: nil
+  def initialize includes: nil, preloaders: [], data_block:, only: nil, except: nil, order_column: nil, type: nil, params_type: nil
     @includes = includes
     @preloaders = preloaders
     @only = only && [*only].map(&:to_s)
@@ -10,13 +10,22 @@ class ArSerializer::Field
     @data_block = data_block
     @order_column = order_column
     @type = type
+    @params_type = params_type
   end
 
   def type
-    @type.is_a?(Proc) ? @type.call : @type
+    type = @type.is_a?(Proc) ? @type.call : @type
+    if type.is_a? String
+      Object.const_get type
+    elsif type.is_a?(Array) && type.size == 1 && type.first.is_a?(String)
+      [Object.const_get(type.first)]
+    else
+      type
+    end
   end
 
   def arguments
+    return @params_type if @params_type
     @preloaders.size
     @data_block.parameters
     parameters_list = [@data_block.parameters.drop(@preloaders.size + 1)]
@@ -45,7 +54,12 @@ class ArSerializer::Field
       end
     end
     arguments[:any] = false if any
-    arguments
+    arguments.map do |key, req|
+      type = key.to_s.match?(/^(.+_)?id|Id$/) ? :int : nil
+      name = key.to_s.underscore
+      type = [type] if name.singularize.pluralize == name
+      [key, req ? { type => :required } : type]
+    end.to_h
   end
 
   def validate_attributes(attributes)
@@ -111,9 +125,9 @@ class ArSerializer::Field
     }[attr_type.type]
   end
 
-  def self.create(klass, name, type: nil, count_of: nil, includes: nil, preload: nil, only: nil, except: nil, order_column: nil, &data_block)
+  def self.create(klass, name, type: nil, params_type: nil, count_of: nil, includes: nil, preload: nil, only: nil, except: nil, order_column: nil, &data_block)
     if count_of
-      if includes || preload || data_block || only || except || type
+      if includes || preload || data_block || only || except || type || params_type
         raise ArgumentError, 'includes, preload block cannot be used with count_of'
       end
       return count_field klass, count_of
@@ -121,7 +135,7 @@ class ArSerializer::Field
     association = klass.reflect_on_association name if klass.respond_to? :reflect_on_association
     if association
       type ||= -> { association.collection? ? [association.klass] : association.klass }
-      return association_field klass, name, only: only, except: except, type: type if !includes && !preload && !data_block
+      return association_field klass, name, only: only, except: except, type: type if !includes && !preload && !data_block && !params_type
     end
     type ||= lambda do
       if klass.respond_to? :column_for_attribute
@@ -130,10 +144,10 @@ class ArSerializer::Field
         type_from_attribute_type klass, name.to_s
       end
     end
-    custom_field klass, name, includes: includes, preload: preload, only: only, except: except, order_column: order_column, type: type, &data_block
+    custom_field klass, name, includes: includes, preload: preload, only: only, except: except, order_column: order_column, type: type, params_type: params_type, &data_block
   end
 
-  def self.custom_field(klass, name, includes:, preload:, only:, except:, order_column:, type: , &data_block)
+  def self.custom_field(klass, name, includes:, preload:, only:, except:, order_column:, type:, params_type:, &data_block)
     if preload
       preloaders = Array(preload).map do |preloader|
         next preloader if preloader.is_a? Proc
@@ -148,7 +162,7 @@ class ArSerializer::Field
     data_block ||= ->(preloaded, _context, _params) { preloaded[id] } if preloaders.size == 1
     raise ArgumentError, 'data_block needed if multiple preloaders are present' if !preloaders.empty? && data_block.nil?
     new(
-      includes: includes, preloaders: preloaders, only: only, except: except, order_column: order_column, type: type,
+      includes: includes, preloaders: preloaders, only: only, except: except, order_column: order_column, type: type, params_type: params_type,
       data_block: data_block || ->(_context, _params) { send name }
     )
   end
@@ -179,7 +193,7 @@ class ArSerializer::Field
     data_block = lambda do |preloaded, _context, _params|
       preloaded ? preloaded[id] || [] : send(name)
     end
-    new preloaders: [preloader], data_block: data_block, only: only, except: except, type: type
+    new preloaders: [preloader], data_block: data_block, only: only, except: except, type: type, params_type: { limit: :int, order: :any }
   end
 
   def self.preload_association(klass, models, name, limit: nil, order: nil)

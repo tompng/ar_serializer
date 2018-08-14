@@ -6,9 +6,11 @@ module ArSerializer::GraphQL
     type_name = lambda do |type|
       if type.nil?
         'Any'
-      elsif type.is_a?(Array)
+      elsif type.is_a?(Hash) && type.values == [:required]
+        type_name.call(type.keys.first).gsub(/!?$/, '!')
+      elsif type.is_a?(Array) && type.size == 1
         "[#{type_name.call type.first}]"
-      elsif %i[int int! float float! boolean boolean! string string!].include? type
+      elsif %i[any any! int int! float float! boolean boolean! string string!].include? type
         type.to_s.camelize
       elsif type.is_a?(Class) && type < ArSerializer::Serializable
         type.name.delete ':'
@@ -25,7 +27,7 @@ module ArSerializer::GraphQL
         types << (type.is_a?(Array) ? type.first : type)
         arguments = field.arguments
         unless arguments.empty?
-          arg_types = arguments.map { |key, req| "#{key}: Any#{req ? '!' : ''}"  }
+          arg_types = arguments.map { |key, arg_type| "#{key}: #{type_name.call arg_type}"  }
           arg = "(#{arg_types.join ', '})"
         end
         fields << "  #{name}#{arg}: #{type_name.call type}"
@@ -55,11 +57,9 @@ module ArSerializer::GraphQL
     SCHEMA
   end
 
-  def self.serialize(schema, query, use: nil)
-    parsed_query = ArSerializer::GraphQL::QueryParser.parse query
-    {
-      data: ArSerializer::Serializer.serialize(schema, parsed_query, use: use)
-    }
+  def self.serialize(schema, gql_query, *args)
+    query = ArSerializer::GraphQL::QueryParser.parse gql_query
+    { data: ArSerializer::Serializer.serialize(schema, query, *args) }
   end
 end
 

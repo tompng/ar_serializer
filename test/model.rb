@@ -3,13 +3,13 @@ require 'active_record'
 class User < ActiveRecord::Base
   has_many :posts
   serializer_field :id, :name, :posts
-  serializer_field(:foo) { :foo1 }
-  serializer_field(:foo, namespace: :aaa) { :foo2 }
-  serializer_field(:bar, namespace: [:aaa, :bbb]) { :bar }
-  serializer_field(:foobar, namespace: :bbb) { :foobar }
-  serializer_field(:posts_only_title, only: :title) { posts }
-  serializer_field(:posts_only_body, only: :body) { posts }
-  serializer_field(:favorite_post) { FavoritePost.new id if id.odd? }
+  serializer_field(:foo, type: :string) { :foo1 }
+  serializer_field(:foo, namespace: :aaa, type: :string!) { :foo2 }
+  serializer_field(:bar, namespace: [:aaa, :bbb], type: :string) { :bar }
+  serializer_field(:foobar, namespace: :bbb, type: :string!) { :foobar }
+  serializer_field(:posts_only_title, only: :title, type: ['Post']) { posts }
+  serializer_field :posts_only_body, association: :posts, only: :body
+  serializer_field(:favorite_post, type: 'FavoritePost') { FavoritePost.new id if id.odd? }
   serializer_field(
     :posts_with_total,
     preload: lambda do |models, _context, params|
@@ -34,7 +34,7 @@ class Post < ActiveRecord::Base
   has_many :comments
   serializer_field :id, :title, :body, :user, :comments
   serializer_field :user_only_name, association: :user, only: :name
-  serializer_field(:user_except_posts, except: :posts) { user }
+  serializer_field(:user_except_posts, except: :posts, type: User) { user }
   serializer_field :created_at, namespace: :aaa
   serializer_field :cmnts, association: :comments
   serializer_field(:updatedAt, order_column: :updated_at) { updated_at }
@@ -55,9 +55,11 @@ class FavoritePost
     reasons[@num % reasons.size]
   end
 
-  serializer_field :reason
+  serializer_field :reason, type: :string
   serializer_field(
-    :post, preload: ->(fps) { Post.where(id: fps.map(&:pstid)).index_by(&:id) }
+    :post,
+    type: Post,
+    preload: ->(fps) { Post.where(id: fps.map(&:pstid)).index_by(&:id) }
   ) do |preloaded|
     preloaded[pstid]
   end
@@ -74,11 +76,11 @@ class Comment < ActiveRecord::Base
     Star.where(comment_id: comments.map(&:id)).group(:comment_id).count
   end
 
-  serializer_field :stars_count_x5, preload: :star_count_loader do |preloaded|
+  serializer_field :stars_count_x5, type: :int!, preload: :star_count_loader do |preloaded|
     (preloaded[id] || 0) * 5
   end
 
-  serializer_field :current_user_stars, preload: lambda { |comments, context|
+  serializer_field :current_user_stars, type: 'Star', preload: lambda { |comments, context|
     stars = Star.where(comment_id: comments.map(&:id), user_id: context[:current_user].id)
     Hash.new { [] }.merge stars.group_by(&:comment_id)
   }

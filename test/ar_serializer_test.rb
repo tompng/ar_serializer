@@ -250,7 +250,7 @@ class ArSerializerTest < Minitest::Test
       serializer_field :user, type: User do |_context, id:|
         User.find id
       end
-      serializer_field :users, type: [User] do
+      serializer_field :users, type: [User], params_type: { words: [:string] } do
         User.all
       end
     end
