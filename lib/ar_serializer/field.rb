@@ -127,7 +127,7 @@ class ArSerializer::Field
 
   def self.create(klass, name, type: nil, params_type: nil, count_of: nil, includes: nil, preload: nil, only: nil, except: nil, order_column: nil, &data_block)
     if count_of
-      if includes || preload || data_block || only || except || type || params_type
+      if includes || preload || data_block || only || except
         raise ArgumentError, 'includes, preload block cannot be used with count_of'
       end
       return count_field klass, count_of
