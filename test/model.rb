@@ -37,7 +37,9 @@ class Post < ActiveRecord::Base
   serializer_field(:user_except_posts, except: :posts, type: User) { user }
   serializer_field :created_at, namespace: :aaa
   serializer_field :cmnts, association: :comments
-  serializer_field(:updatedAt, order_column: :updated_at) { updated_at }
+  serializer_field(:modifiedAt, order_column: :updated_at) { updated_at }
+  serializer_field :createdAt
+  serializer_field :Comments
 end
 
 class FavoritePost
@@ -80,7 +82,7 @@ class Comment < ActiveRecord::Base
     (preloaded[id] || 0) * 5
   end
 
-  serializer_field :current_user_stars, type: 'Star', preload: lambda { |comments, context|
+  serializer_field :current_user_stars, type: ['Star'], preload: lambda { |comments, context|
     stars = Star.where(comment_id: comments.map(&:id), user_id: context[:current_user].id)
     Hash.new { [] }.merge stars.group_by(&:comment_id)
   }

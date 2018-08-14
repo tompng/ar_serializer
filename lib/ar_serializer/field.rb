@@ -77,7 +77,7 @@ class ArSerializer::Field
     data_block = lambda do |preloaded, _context, _params|
       preloaded[id] || 0
     end
-    new preloaders: [preloader], data_block: data_block, type: :int
+    new preloaders: [preloader], data_block: data_block, type: :int!
   end
 
   def self.top_n_loader_available?
@@ -132,19 +132,20 @@ class ArSerializer::Field
       end
       return count_field klass, count_of
     end
-    association = klass.reflect_on_association name if klass.respond_to? :reflect_on_association
+    underscore_name = name.to_s.underscore
+    association = klass.reflect_on_association underscore_name if klass.respond_to? :reflect_on_association
     if association
       type ||= -> { association.collection? ? [association.klass] : association.klass }
-      return association_field klass, name, only: only, except: except, type: type if !includes && !preload && !data_block && !params_type
+      return association_field klass, underscore_name, only: only, except: except, type: type if !includes && !preload && !data_block && !params_type
     end
     type ||= lambda do
       if klass.respond_to? :column_for_attribute
-        type_from_column_type klass, name
+        type_from_column_type klass, underscore_name
       elsif klass.respond_to? :attribute_types
-        type_from_attribute_type klass, name.to_s
+        type_from_attribute_type klass, underscore_name
       end
     end
-    custom_field klass, name, includes: includes, preload: preload, only: only, except: except, order_column: order_column, type: type, params_type: params_type, &data_block
+    custom_field klass, underscore_name, includes: includes, preload: preload, only: only, except: except, order_column: order_column, type: type, params_type: params_type, &data_block
   end
 
   def self.custom_field(klass, name, includes:, preload:, only:, except:, order_column:, type:, params_type:, &data_block)
@@ -180,7 +181,7 @@ class ArSerializer::Field
       end
     end
     info = klass._serializer_field_info(key)
-    key = info&.order_column || key
+    key = info&.order_column || key.to_s.underscore
     raise ArSerializer::InvalidQuery, "unpermitted order key: #{key}" unless klass.has_attribute?(key) && info
     raise ArSerializer::InvalidQuery, "invalid order mode: #{mode.inspect}" unless [:asc, :desc, 'asc', 'desc'].include? mode
     [key.to_sym, mode.to_sym]
