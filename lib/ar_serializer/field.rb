@@ -136,7 +136,7 @@ class ArSerializer::Field
     association = klass.reflect_on_association underscore_name if klass.respond_to? :reflect_on_association
     if association
       type ||= -> { association.collection? ? [association.klass] : association.klass }
-      return association_field klass, underscore_name, only: only, except: except, type: type if !includes && !preload && !data_block && !params_type
+      return association_field klass, underscore_name, only: only, except: except, type: type, collection: association.collection? if !includes && !preload && !data_block && !params_type
     end
     type ||= lambda do
       if klass.respond_to? :column_for_attribute
@@ -187,14 +187,21 @@ class ArSerializer::Field
     [key.to_sym, mode.to_sym]
   end
 
-  def self.association_field(klass, name, only:, except:, type:)
-    preloader = lambda do |models, _context, limit: nil, order: nil, **_option|
-      preload_association klass, models, name, limit: limit, order: order
+  def self.association_field(klass, name, only:, except:, type:, collection:)
+    if collection
+      preloader = lambda do |models, _context, limit: nil, order: nil, **_option|
+        preload_association klass, models, name, limit: limit, order: order
+      end
+      params_type = { limit: :int, order: :any }
+    else
+      preloader = lambda do |models, _context, _params|
+        preload_association klass, models, name
+      end
     end
     data_block = lambda do |preloaded, _context, _params|
       preloaded ? preloaded[id] || [] : send(name)
     end
-    new preloaders: [preloader], data_block: data_block, only: only, except: except, type: type, params_type: { limit: :int, order: :any }
+    new preloaders: [preloader], data_block: data_block, only: only, except: except, type: type, params_type: params_type
   end
 
   def self.preload_association(klass, models, name, limit: nil, order: nil)
