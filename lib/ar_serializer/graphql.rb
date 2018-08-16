@@ -171,4 +171,29 @@ module ArSerializer::GraphQL::QueryParser
     raise unless chars.empty?
     fields
   end
+
+  graphql_available = begin
+    require 'graphql'
+    true
+  rescue LoadError
+    false
+  end
+  if graphql_available
+    def self.parse(query)
+      document = GraphQL::Language::Parser.parse query
+      parse_arguments = lambda do |arguments|
+        arguments.map { |arg| [arg.name, arg.value] }.to_h
+      end
+      parse_query = lambda do |selections|
+        selections.index_by(&:name).transform_values do |selection|
+          {
+            attributes: parse_query.call(selection.selections),
+            params: parse_arguments.call(selection.arguments),
+            as: selection.alias
+          }.compact
+        end
+      end
+      parse_query.call document.definitions.first.selections
+    end
+  end
 end
