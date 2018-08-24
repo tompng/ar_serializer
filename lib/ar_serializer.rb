@@ -1,7 +1,6 @@
 require 'ar_serializer/version'
 require 'ar_serializer/serializer'
 require 'ar_serializer/field'
-require 'ar_serializer/graphql'
 require 'active_record'
 
 module ArSerializer
@@ -73,3 +72,5 @@ end
 
 ActiveRecord::Base.include ArSerializer::Serializable
 ActiveRecord::Relation.include ArSerializer::ArrayLikeCompositeValue
+
+require 'ar_serializer/graphql'

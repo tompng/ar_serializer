@@ -1,8 +1,107 @@
 module ArSerializer::GraphQL
+  class NamedObject
+    include ::ArSerializer::Serializable
+    attr_reader :name
+    def initialize(name)
+      @name = name
+    end
+    serializer_field :name
+  end
+  class ArgClass
+    include ::ArSerializer::Serializable
+    attr_reader :name, :type
+    def initialize(name, type)
+      @name = name
+      @type = TypeClass.new type
+    end
+    serializer_field :name, :type
+    serializer_field(:defaultValue) { nil }
+    serializer_field(:description) { nil }
+  end
+  class FieldClass
+    include ::ArSerializer::Serializable
+    attr_reader :name, :field
+    def initialize(name, field)
+      @name = name
+      @field = field
+    end
+    serializer_field :name
+    %i[description isDeprecated deprecationReason].each do |name|
+      serializer_field(name) { nil }
+    end
+    serializer_field :args do
+      field.arguments.map do |key, type|
+        ArgClass.new key, type
+      end
+    end
+    serializer_field :type do
+      TypeClass.new field.type
+    end
+  end
+  class TypeClass
+    include ::ArSerializer::Serializable
+    attr_reader :type
+    def initialize(type)
+      @type = type
+      @type = type.keys.first if type.is_a? Hash
+    end
+    include ::ArSerializer
+    serializer_field(:queryType) { NamedObject.new type.name }
+    serializer_field(:mutationType) { nil }
+    serializer_field(:subscriptionType) { nil }
+    serializer_field(:directives) { [] }
+    serializer_field :types do
+      types = []
+      ArSerializer::GraphQL._definition(type, all_types: types)
+      (types | %w[String Boolean Int Float Any]) .map do |type|
+        TypeClass.new(type)
+      end
+    end
+    serializer_field :kind do
+      next 'LIST' if type.is_a?(Array)
+      type.is_a?(Class) ? 'OBJECT' : 'SCALAR'
+    end
+    serializer_field :ofType do
+      TypeClass.new(type.first) if type.is_a?(Array)
+    end
+    serializer_field :name do
+      next nil if type.is_a?(Array)
+      aa = type.is_a?(Class) ? type.name.delete(':') : type.to_s.delete('!').capitalize
+      aa.empty? ? 'Any' : aa
+    end
+    serializer_field :description do
+      case type
+      when 'Any'
+        'any value'
+      when 'Boolean'
+        'true or false'
+      when 'String'
+        'string value'
+      when 'Float'
+        'float value'
+      when 'Int'
+        'integer value'
+      else
+        type.name
+      end
+    end
+    serializer_field :fields do
+      next nil unless type.is_a? Class
+      (type._serializer_field_keys - ['__schema']).map do |name|
+        FieldClass.new name, type._serializer_field_info(name)
+      end
+    end
+    serializer_field(:interfaces) { [] }
+    %i[inputFields enumValues possibleTypes].each do |name|
+      serializer_field(name) { nil }
+    end
+  end
+
   def self.definition(schema_klass, use: nil)
     ArSerializer::Serializer.with_namespaces(use) { _definition schema_klass }
   end
-  def self._definition(schema_klass)
+
+  def self._definition(schema_klass, all_types: nil)
     type_name = lambda do |type|
       if type.nil?
         'Any'
@@ -44,6 +143,7 @@ module ArSerializer::GraphQL
       next if defined_types[type]
       next unless type.is_a?(Class) && type < ArSerializer::Serializable
       defined_types[type] = true
+      all_types << type if all_types
       schema, sub_types = extract_schema.call type
       definitions << schema
       types += sub_types
