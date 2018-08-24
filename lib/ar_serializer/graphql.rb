@@ -143,6 +143,11 @@ module ArSerializer::GraphQL::QueryParser
     end
     parse_fields = nil
     parse_field = lambda do
+      if chars[0,3].join == '...'
+        3.times { chars.shift }
+        name = parse_name.call
+        return ['...' + name, { fragment: name }]
+      end
       name, alias_name = parse_name_alias.call
       return unless name
       consume_space.call
@@ -158,42 +163,59 @@ module ArSerializer::GraphQL::QueryParser
       fields = {}
       loop do
         name, field = parse_field.call
+        consume_blank.call
         break unless name
         fields[name] = field
-        consume_blank.call
       end
       raise unless consume_pattern.call '}'
       fields
     end
-    consume_blank.call
-    fields = parse_fields.call
-    consume_blank.call
+    parse_definition = lambda do
+      consume_blank.call
+      definition_types = ''
+      definition_types << chars.shift while chars.first&.match?(/[a-zA-Z0-9_\t ]/)
+      fields = parse_fields.call
+      consume_blank.call
+      return unless fields
+      type, *args = definition_types.split
+      type ||= 'query'
+      { type: type, args: args, fields: fields }
+    end
+    definitions = []
+    loop do
+      definition = parse_definition.call
+      break unless definition
+      definitions << definition
+    end
     raise unless chars.empty?
-    fields
-  end
 
-  graphql_available = begin
-    require 'graphql'
-    true
-  rescue LoadError
-    false
-  end
-  if graphql_available
-    def self.parse(query)
-      document = GraphQL::Language::Parser.parse query
-      parse_arguments = lambda do |arguments|
-        arguments.map { |arg| [arg.name, arg.value] }.to_h
-      end
-      parse_query = lambda do |selections|
-        selections.index_by(&:name).transform_values do |selection|
-          {
-            attributes: parse_query.call(selection.selections),
-            params: parse_arguments.call(selection.arguments),
-            as: selection.alias
-          }.compact
+    query = definitions.find { |definition| definition[:type] == 'query' }
+    fragments = definitions.select { |definition| definition[:type] == 'fragment' }
+    fragments_by_name = fragments.map { |frag| [frag[:args].first, frag] }.to_h
+
+    embed_fragment = nil
+    extract_fragment = lambda do |fragment|
+      raise if fragment[:state] == :start
+      return if fragment[:state] == :done
+      fragment[:state] = :start
+      fragment[:fields] = embed_fragment.call fragment[:fields]
+      fragment[:state] = :done
+    end
+
+    embed_fragment = lambda do |fields|
+      output = {}
+      fields.each do |key, value|
+        if value.is_a?(Hash) && value[:fragment]
+          fragment = fragments_by_name[value[:fragment]]
+          extract_fragment.call fragment
+          output.update fragment[:fields]
+        else
+          output[key] = value
+          value[:attributes] = embed_fragment.call value[:attributes] if value[:attributes]
         end
       end
-      parse_query.call document.definitions.first.selections
+      output
     end
+    embed_fragment.call query[:fields]
   end
 end
