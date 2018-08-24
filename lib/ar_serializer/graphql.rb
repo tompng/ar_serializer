@@ -38,6 +38,24 @@ module ArSerializer::GraphQL
       TypeClass.new field.type
     end
   end
+  class SchemaClass
+    include ::ArSerializer::Serializable
+    attr_reader :klass
+    def initialize(klass)
+      @klass = klass
+    end
+    serializer_field(:queryType) { NamedObject.new klass.name }
+    serializer_field(:mutationType) { nil }
+    serializer_field(:subscriptionType) { nil }
+    serializer_field(:directives) { [] }
+    serializer_field :types do
+      types = []
+      ArSerializer::GraphQL._definition(klass, all_types: types)
+      (types | %w[String Boolean Int Float Any]) .map do |type|
+        TypeClass.new(type)
+      end
+    end
+  end
   class TypeClass
     include ::ArSerializer::Serializable
     attr_reader :type
@@ -46,17 +64,6 @@ module ArSerializer::GraphQL
       @type = type.keys.first if type.is_a? Hash
     end
     include ::ArSerializer
-    serializer_field(:queryType) { NamedObject.new type.name }
-    serializer_field(:mutationType) { nil }
-    serializer_field(:subscriptionType) { nil }
-    serializer_field(:directives) { [] }
-    serializer_field :types do
-      types = []
-      ArSerializer::GraphQL._definition(type, all_types: types)
-      (types | %w[String Boolean Int Float Any]) .map do |type|
-        TypeClass.new(type)
-      end
-    end
     serializer_field :kind do
       next 'LIST' if type.is_a?(Array)
       type.is_a?(Class) ? 'OBJECT' : 'SCALAR'
