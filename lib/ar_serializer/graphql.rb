@@ -237,17 +237,18 @@ module ArSerializer::GraphQL
     SCHEMA
   end
 
-  def self.serialize(schema, gql_query, operation_name: nil, **args)
+  def self.serialize(schema, gql_query, operation_name: nil, variables: {}, **args)
     query = ArSerializer::GraphQL::QueryParser.parse(
       gql_query,
-      operation_name: operation_name
+      operation_name: operation_name,
+      variables: variables
     )
     { data: ArSerializer::Serializer.serialize(schema, query, **args) }
   end
 end
 
 module ArSerializer::GraphQL::QueryParser
-  def self.parse(query, operation_name: nil)
+  def self.parse(query, operation_name: nil, variables: {})
     chars = query.chars
     consume_blank = lambda do
       chars.shift while chars.first == ' ' || chars.first == "\n"
@@ -311,6 +312,10 @@ module ArSerializer::GraphQL::QueryParser
         result = parse_arg_fields.call
         raise unless consume_pattern.call '}'
         result
+      when '$'
+        chars.shift
+        name = parse_name.call
+        variables[name]
       when /[0-9+\-]/
         s = ''
         s << chars.shift while chars.first.match?(/[0-9.e+\-]/)
@@ -382,11 +387,11 @@ module ArSerializer::GraphQL::QueryParser
     parse_definition = lambda do
       consume_blank.call
       definition_types = ''
-      definition_types << chars.shift while chars.first&.match?(/[a-zA-Z0-9_\t ]/)
+      definition_types << chars.shift while chars.first&.match?(/[^{}]/)
       fields = parse_fields.call
       consume_blank.call
       return unless fields
-      type, *args = definition_types.split
+      type, *args = definition_types.split(/[\s()]+/)
       type ||= 'query'
       { type: type, args: args, fields: fields }
     end
