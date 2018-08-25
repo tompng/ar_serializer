@@ -312,6 +312,10 @@ module ArSerializer::GraphQL::QueryParser
         s = ''
         s << chars.shift while chars.first.match?(/[0-9.e+\-]/)
         s.match?(/\.|e/) ? s.to_f : s.to_i
+      when /[a-zA-Z]/
+        s = parse_name.call
+        converts = { 'true' => true, 'false' => false, 'null' => nil }
+        converts.key?(s) ? converts[s] : s
       else
         :none
       end
