@@ -67,13 +67,18 @@ module ArSerializer::GraphQL
       strings.sort + klasses.sort_by(&:name)
     end
 
-    serializer_field(:queryType) { NamedObject.new klass.name }
+    def types
+      collect_types.map { |type| TypeClass.from type }
+    end
+
+    def name
+      klass.name.delete ':'
+    end
+    serializer_field(:queryType) { NamedObject.new name }
     serializer_field(:mutationType) { nil }
     serializer_field(:subscriptionType) { nil }
     serializer_field(:directives) { [] }
-    serializer_field :types do
-      collect_types.map { |type| TypeClass.from type }
-    end
+    serializer_field :types
   end
 
   class TypeClass
@@ -203,51 +208,32 @@ module ArSerializer::GraphQL
     end
   end
 
-  def self.definition(schema_klass, use: nil)
-    ArSerializer::Serializer.with_namespaces(use) { _definition schema_klass }
+  def self.definition(klass, use: nil)
+    ArSerializer::Serializer.with_namespaces(use) { _definition klass }
   end
 
-  def self._definition(schema_klass, all_types: nil)
-    type_name = lambda do |type|
-      TypeClass.from(type).inspect
-    end
-    extract_schema = lambda do |klass|
-      fields = []
-      types = []
-      klass._serializer_field_keys.each do |name|
-        field = klass._serializer_field_info name
-        type = field.type
-        types << (type.is_a?(Array) ? type.first : type)
-        arguments = field.arguments
-        unless arguments.empty?
-          arg_types = arguments.map { |key, arg_type| "#{key}: #{type_name.call arg_type}"  }
-          arg = "(#{arg_types.join ', '})"
-        end
-        fields << "  #{name}#{arg}: #{type_name.call type}"
+  def self._definition(klass)
+    schema = SchemaClass.new(klass)
+    definitions = schema.types.map do |type|
+      next "scalar #{type.name}" if type.is_a? ScalarTypeClass
+      fields = type.fields.map do |field|
+        field.name
+        args = field.args.map { |arg| "#{arg.name}: #{arg.type.inspect}" }
+        args_exp = "(#{args.join(', ')})" unless args.empty?
+        "  #{field.name}#{args_exp}: #{field.type.inspect}"
       end
-      schema = ["type #{type_name.call klass} {", fields, '}'].join "\n"
-      [schema, types]
-    end
-    defined_types = {}
-    types = [schema_klass]
-    definitions = []
-    definitions << 'scalar Any'
-    until types.empty?
-      type = types.shift
-      next if defined_types[type]
-      next unless type.is_a?(Class) && type < ArSerializer::Serializable
-      defined_types[type] = true
-      all_types << type if all_types
-      schema, sub_types = extract_schema.call type
-      definitions << schema
-      types += sub_types
+      <<~TYPE
+        type #{type.name} {
+        #{fields.join("\n")}
+        }
+      TYPE
     end
     <<~SCHEMA
       schema {
-        query: #{type_name.call schema_klass}
+        query: #{schema.name}
       }
 
-      #{definitions.join "\n\n"}
+      #{definitions.map(&:strip).join("\n\n")}
     SCHEMA
   end
 
