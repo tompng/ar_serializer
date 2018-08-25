@@ -192,7 +192,7 @@ module ArSerializer::GraphQL
 
   class NonNullTypeClass < TypeClass
     def kind
-      'LIST'
+      'NON_NULL'
     end
 
     def of_type
