@@ -12,9 +12,10 @@ module ArSerializer::GraphQL
     attr_reader :name, :type
     def initialize(name, type)
       @name = name
-      @type = TypeClass.new type
+      @type = TypeClass.from type
     end
-    serializer_field :name, :type
+    serializer_field :name
+    serializer_field :type, except: :fields
     serializer_field(:defaultValue) { nil }
     serializer_field(:description) { nil }
   end
@@ -25,82 +26,180 @@ module ArSerializer::GraphQL
       @name = name
       @field = field
     end
-    serializer_field :name
-    %i[description isDeprecated deprecationReason].each do |name|
-      serializer_field(name) { nil }
-    end
-    serializer_field :args do
+
+    def args
       field.arguments.map do |key, type|
         ArgClass.new key, type
       end
     end
-    serializer_field :type do
-      TypeClass.new field.type
+
+    def type
+      TypeClass.from field.type
+    end
+
+    def collect_types(types)
+      args.each { |arg| arg.type.collect_types types }
+      type.collect_types types
+    end
+
+    serializer_field :name, :args
+    serializer_field :type, except: :fields
+    %i[description isDeprecated deprecationReason].each do |name|
+      serializer_field(name) { nil }
     end
   end
+
   class SchemaClass
     include ::ArSerializer::Serializable
     attr_reader :klass
     def initialize(klass)
       @klass = klass
     end
+
+    def collect_types
+      types = {}
+      klass._serializer_field_keys.each do |name|
+        fc = FieldClass.new name, klass._serializer_field_info(name)
+        fc.collect_types types
+      end
+      strings, klasses = types.keys.partition { |t| t.is_a? String }
+      klasses << klass
+      strings.sort + klasses.sort_by(&:name)
+    end
+
     serializer_field(:queryType) { NamedObject.new klass.name }
     serializer_field(:mutationType) { nil }
     serializer_field(:subscriptionType) { nil }
     serializer_field(:directives) { [] }
     serializer_field :types do
-      types = []
-      ArSerializer::GraphQL._definition(klass, all_types: types)
-      (types | %w[String Boolean Int Float Any]) .map do |type|
-        TypeClass.new(type)
-      end
+      collect_types.map { |type| TypeClass.from type }
     end
   end
+
   class TypeClass
     include ::ArSerializer::Serializable
+    include ::ArSerializer
     attr_reader :type
     def initialize(type)
       @type = type
-      @type = type.keys.first if type.is_a? Hash
     end
-    include ::ArSerializer
-    serializer_field :kind do
-      next 'LIST' if type.is_a?(Array)
-      type.is_a?(Class) ? 'OBJECT' : 'SCALAR'
+
+    def collect_types(types); end
+
+    def description
+      ''
     end
-    serializer_field :ofType do
-      TypeClass.new(type.first) if type.is_a?(Array)
+
+    def name; end
+
+    def of_type; end
+
+    def fields; end
+
+    serializer_field :kind, :name, :description, :fields
+    serializer_field :ofType, except: :fields
+    serializer_field(:interfaces) { [] }
+    %i[inputFields enumValues possibleTypes].each do |name|
+      serializer_field(name) { nil }
     end
-    serializer_field :name do
-      next nil if type.is_a?(Array)
-      aa = type.is_a?(Class) ? type.name.delete(':') : type.to_s.delete('!').capitalize
-      aa.empty? ? 'Any' : aa
-    end
-    serializer_field :description do
+
+    def self.from(type)
+      type = type.to_s if type.is_a?(Symbol)
+      type = type.capitalize if type.is_a?(String)
+      type = { type[0...-1] => :required } if type.is_a?(String) && type.ends_with?('!')
+      type = 'Any' if type.is_a?(String) && type.empty?
       case type
-      when 'Any'
-        'any value'
-      when 'Boolean'
-        'true or false'
-      when 'String'
-        'string value'
-      when 'Float'
-        'float value'
-      when 'Int'
-        'integer value'
-      else
-        type.name
+      when Class
+        SerializableTypeClass.new type
+      when String
+        ScalarTypeClass.new type
+      when Array
+        ListTypeClass.new type.first
+      when Hash
+        NonNullTypeClass.new type.keys.first
+      when nil
+        ScalarTypeClass.new 'Any'
       end
     end
-    serializer_field :fields do
-      next nil unless type.is_a? Class
+  end
+
+  class ScalarTypeClass < TypeClass
+    def kind
+      'SCALAR'
+    end
+
+    def name
+      type
+    end
+
+    def collect_types(types)
+      types[name] = true
+    end
+
+    def inspect
+      type
+    end
+  end
+
+  class SerializableTypeClass < TypeClass
+    def kind
+      'OBJECT'
+    end
+
+    def name
+      type.name.delete ':'
+    end
+
+    def fields
       (type._serializer_field_keys - ['__schema']).map do |name|
         FieldClass.new name, type._serializer_field_info(name)
       end
     end
-    serializer_field(:interfaces) { [] }
-    %i[inputFields enumValues possibleTypes].each do |name|
-      serializer_field(name) { nil }
+
+    def collect_types(types)
+      return if types[type]
+      types[type] = true
+      fields.each { |field| field.collect_types types }
+    end
+
+    def inspect
+      name
+    end
+  end
+
+  class ListTypeClass < TypeClass
+    def kind
+      'LIST'
+    end
+
+    def of_type
+      TypeClass.from type
+    end
+
+    def collect_types(types)
+      of_type.collect_types types
+    end
+
+    def inspect
+      "[#{of_type.inspect}]"
+    end
+  end
+
+  class NonNullTypeClass < TypeClass
+    def kind
+      'LIST'
+    end
+
+    def of_type
+      TypeClass.from type
+    end
+
+    def collect_types(types)
+      of_type.collect_types types
+    end
+
+    def inspect
+      "#{of_type.inspect}!"
     end
   end
 
@@ -110,19 +209,7 @@ module ArSerializer::GraphQL
 
   def self._definition(schema_klass, all_types: nil)
     type_name = lambda do |type|
-      if type.nil?
-        'Any'
-      elsif type.is_a?(Hash) && type.values == [:required]
-        type_name.call(type.keys.first).gsub(/!?$/, '!')
-      elsif type.is_a?(Array) && type.size == 1
-        "[#{type_name.call type.first}]"
-      elsif %i[any any! int int! float float! boolean boolean! string string!].include? type
-        type.to_s.camelize
-      elsif type.is_a?(Class) && type < ArSerializer::Serializable
-        type.name.delete ':'
-      else
-        raise "invalid type: #{type.class}: #{type}"
-      end
+      TypeClass.from(type).inspect
     end
     extract_schema = lambda do |klass|
       fields = []
