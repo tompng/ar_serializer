@@ -273,53 +273,75 @@ module ArSerializer::GraphQL::QueryParser
         name
       end
     end
+    parse_arg_fields = nil
     parse_arg_value = lambda do
-      s = []
-      mode = []
-      loop do
-        c = chars.first
-        case mode.last
-        when '"'
-          if c == '"'
-            mode.pop
-          elsif c == '\\'
-            mode << '\\'
-          end
-        when '\\'
-          mode.pop
-        else
-          break if c == ')'
-          break if mode.empty? && c == ','
-          if '"[{'.include? c
-            mode << c
-          elsif ']}'.include? c
-            mode.pop
-          elsif c == '"'
-            modes << '"'
+      consume_blank.call
+      case chars.first
+      when '"'
+        chars.shift
+        s = ''
+        loop do
+          if chars.first == '\\'
+            s << chars.shift
+            s << chars.shift
+          elsif chars.first == '"'
+            break
+          else
+            s << chars.shift
           end
         end
-        s << chars.shift
+        chars.shift
+        JSON.parse %("#{s}")
+      when '['
+        chars.shift
+        result = []
+        loop do
+          value = parse_arg_value.call
+          consume_pattern.call ','
+          break if value == :none
+          result << value
+        end
+        raise unless consume_pattern.call ']'
+        result
+      when '{'
+        chars.shift
+        result = parse_arg_fields.call
+        raise unless consume_pattern.call '}'
+        result
+      when /[0-9+\-]/
+        s = ''
+        s << chars.shift while chars.first.match?(/[0-9.e+\-]/)
+        s.match?(/\.|e/) ? s.to_f : s.to_i
+      else
+        :none
       end
-      raise unless mode.empty?
-      JSON.parse s.join
     end
-    parse_args = lambda do
-      consume_space.call
-      return unless consume_pattern.call '('
-      args = {}
+
+    parse_arg_fields = lambda do
+      consume_blank.call
+      result = {}
       loop do
-        consume_blank.call
         name = parse_name.call
         break unless name
+        consume_blank.call
         raise unless consume_pattern.call ':'
         consume_blank.call
-        args[name] = parse_arg_value.call
+        value = parse_arg_value.call
+        raise if value == :none
+        result[name] = value
         consume_blank.call
-        break unless consume_pattern.call ','
+        consume_pattern.call ','
+        consume_blank.call
       end
       consume_blank.call
+      result
+    end
+
+    parse_args = lambda do
+      return unless consume_pattern.call '('
+      args = parse_arg_fields.call
       raise unless consume_pattern.call ')'
-      args
+      return args
     end
     parse_fields = nil
     parse_field = lambda do
