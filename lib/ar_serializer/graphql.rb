@@ -237,14 +237,17 @@ module ArSerializer::GraphQL
     SCHEMA
   end
 
-  def self.serialize(schema, gql_query, *args)
-    query = ArSerializer::GraphQL::QueryParser.parse gql_query
-    { data: ArSerializer::Serializer.serialize(schema, query, *args) }
+  def self.serialize(schema, gql_query, operation_name: nil, **args)
+    query = ArSerializer::GraphQL::QueryParser.parse(
+      gql_query,
+      operation_name: operation_name
+    )
+    { data: ArSerializer::Serializer.serialize(schema, query, **args) }
   end
 end
 
 module ArSerializer::GraphQL::QueryParser
-  def self.parse query
+  def self.parse(query, operation_name: nil)
     chars = query.chars
     consume_blank = lambda do
       chars.shift while chars.first == ' ' || chars.first == "\n"
@@ -395,7 +398,10 @@ module ArSerializer::GraphQL::QueryParser
     end
     raise unless chars.empty?
 
-    query = definitions.find { |definition| definition[:type] == 'query' }
+    query = definitions.find do |definition|
+      next unless definition[:type] == 'query'
+      operation_name.nil? || operation_name == definition[:args].first
+    end
     fragments = definitions.select { |definition| definition[:type] == 'fragment' }
     fragments_by_name = fragments.map { |frag| [frag[:args].first, frag] }.to_h
 
