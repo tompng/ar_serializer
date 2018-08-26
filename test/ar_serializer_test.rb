@@ -315,6 +315,6 @@ class ArSerializerTest < Minitest::Test
         }
       }
     )
-    ArSerializer::GraphQL::QueryParser.parse query
+    ArSerializer::GraphQL::Parser.parse query
   end
 end

@@ -32,7 +32,7 @@ module ArSerializer::GraphQL
   end
 
   def self.serialize(schema, gql_query, operation_name: nil, variables: {}, **args)
-    query = ArSerializer::GraphQL::QueryParser.parse(
+    query = ArSerializer::GraphQL::Parser.parse(
       gql_query,
       operation_name: operation_name,
       variables: variables
