@@ -322,10 +322,10 @@ class ArSerializerTest < Minitest::Test
         ...Frag
       }
       fragment Frag on FooBar {
-        aa
+        aa(id: $n)
         bb
       }
     )
-    ArSerializer::GraphQL::Parser.parse query
+    ArSerializer::GraphQL::Parser.parse query, operation_name: 'Xyz', variables: { 'n' => 1 }
   end
 end
