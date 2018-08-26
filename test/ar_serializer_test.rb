@@ -29,8 +29,12 @@ class ArSerializerTest < Minitest::Test
     queries = [
       :title,
       [:title],
+      { title: {} },
+      { title: true },
       { attributes: :title },
-      { attributes: [:title] }
+      { attributes: [:title] },
+      { attributes: { title: {} } },
+      { attributes: { title: true } }
     ]
     queries.each do |query|
       assert_equal expected, ArSerializer.serialize(post, query)
@@ -213,16 +217,23 @@ class ArSerializerTest < Minitest::Test
   def test_order_by_camelized_field
     user_id = Post.group(:user_id).count.max_by(&:last).first
     user = User.find user_id
-    get_target_ids = lambda do
-      ArSerializer.serialize(
-        user.reload,
-        posts: [:id, :updatedAt, params: { order: { updatedAt: :asc } }]
-      )[:posts].map { |post| post[:id] }
+    { modifiedAt: :updated_at, createdAt: :created_at }.each do |field, column|
+      get_target_ids = lambda do
+        ArSerializer.serialize(
+          user.reload,
+          posts: [:id, field, params: { order: { field => :asc } }]
+        )[:posts].map { |post| post[:id] }
+      end
+      user.posts.each do |post|
+        post.update column => rand.days.ago
+      end
+      assert_equal user.posts.order(column => :asc).ids, get_target_ids.call
     end
-    user.posts.each do |post|
-      post.update updated_at: rand.days.ago
-    end
-    assert_equal user.posts.order(updated_at: :asc).ids, get_target_ids.call
+  end
+
+  def test_camelized_association
+    posts = ArSerializer.serialize Post.all, Comments: :id, comments: :id
+    assert(posts.all? { |post| post[:comments] == post[:Comments] })
   end
 
   def test_non_array_composite_value
@@ -239,5 +250,82 @@ class ArSerializerTest < Minitest::Test
   def test_non_activerecord
     output = ArSerializer.serialize User.all, { favorite_post: [:reason, :post] }, include_id: true
     assert(output.any? { |user| user[:favorite_post] && user[:favorite_post][:post][:id] })
+  end
+
+  def test_schema
+    schema = Class.new do
+      def self.name
+        'TestSchema'
+      end
+      include ArSerializer::Serializable
+      serializer_field :user, type: User do |_context, id:|
+        User.find id
+      end
+      serializer_field :users, type: [User], params_type: { words: [:string] } do
+        User.all
+      end
+    end
+    query = %(
+       {
+         user(id: 3) {
+           name
+           PS: posts {
+             id
+             title
+           }
+         }
+         users {
+           id
+           name
+         }
+       }
+    )
+    default_schema = ArSerializer::GraphQL.definition schema
+    aaa_schema = ArSerializer::GraphQL.definition schema, use: :aaa
+    bbb_schema = ArSerializer::GraphQL.definition schema, use: :bbb
+    assert default_schema != aaa_schema
+    assert default_schema != bbb_schema
+    assert aaa_schema != bbb_schema
+    result = ArSerializer::GraphQL.serialize(schema.new, query).as_json
+    assert result['data']['user']['PS']
+  end
+
+  def test_graphql_query_parse
+    random_json = lambda do |level|
+      chars = %("\\{[]},0a).chars
+      if level <= 0
+        [
+          Array.new(10) { chars.sample }.join,
+          rand(10),
+          true,
+          false
+        ].sample
+      elsif rand < 0.5
+        Array.new(4) { random_json.call rand(level) }
+      else
+        Array.new 4 do
+          [Array.new(4) { chars.sample }.join, random_json.call(rand(level))]
+        end.to_h
+        Array.new 4 do
+          [Array.new(4) { chars.sample }.join, 'aaa']
+        end
+      end
+    end
+    query = %(
+      {
+        user(aa: #{random_json.call(4).to_json}) {
+          foo()
+          bar(aa: #{random_json.call(4).to_json}, bb: #{random_json.call(4).to_json})
+        }
+      }
+      query Xyz($n: [[Int!]!]!) {
+        ...Frag
+      }
+      fragment Frag on FooBar {
+        aa(id: $n)
+        bb
+      }
+    )
+    ArSerializer::GraphQL::Parser.parse query, operation_name: 'Xyz', variables: { 'n' => 1 }
   end
 end

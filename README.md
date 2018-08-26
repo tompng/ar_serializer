@@ -42,6 +42,7 @@ ArSerializer.serialize user, :*
 # }
 
 ArSerializer.serialize user, [:id, :name, posts: [:id, :title, comments: :id]]
+ArSerializer.serialize user, { id: true, name: true, posts: { id: true, title: true, comments: :id } }
 # => {
 #   id: 1,
 #   name: "user1",
@@ -95,6 +96,19 @@ class Post < ActiveRecord::Base
 end
 ArSerializer.serialize post, { created_at: { params: { format: '%H:%M:%S' } } }, context: { tz: 'Tokyo' }
 
+# camelcase
+class Foo < ActiveRecord::Base
+  def foo_bar; end
+  serializer_field :fooBar
+end
+
+# non activerecord class
+class Foo
+  include ArSerializer::Serializable
+  def bar; end
+  serializer_field :bar
+end
+
 # namespace
 class User < ActiveRecord::Base
   serializer_field :name
@@ -114,4 +128,21 @@ ArSerializer.serialize user, o_posts: :title, e_posts: :body
 ArSerializer.serialize user, o_posts: :*, e_posts: :*
 ArSerializer.serialize user, o_posts: :body #=> Error
 ArSerializer.serialize user, e_posts: :comments #=> Error
+
+# type annotation and graphql
+class MySchema
+  include ArSerializer::Serializable
+  serializer_field :post, type: Post do |context, id:|
+    Post.find id
+  end
+  serializer_field :user, type: :string, params_type: { name: :string! } do |context, params|
+    User.find_by name: params[:name]
+  end
+  serializer_field :__schema do
+    ArSerializer::GraphQL::SchemaClass.new self.class
+  end
+end
+ArSerializer::GraphQL.definition MySchema # schema.graphql
+ArSerializer::GraphQL.serialize MySchema.new, '{post(id: 1){title} user(name: user1){id name}}'
+ArSerializer::GraphQL.serialize MySchema.new, '{__schema{types{name fields{ name}}}}', operation_name: nil, variables: {}
 ```

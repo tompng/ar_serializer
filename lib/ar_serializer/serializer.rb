@@ -29,22 +29,29 @@ module ArSerializer::Serializer
     Thread.current[:ar_serializer_current_namespaces]
   end
 
-  def self.serialize(model, args, context: nil, include_id: false, use: nil)
-    Thread.current[:ar_serializer_current_namespaces] = use
-    attributes = parse_args(args)[:attributes]
-    if model.is_a?(ArSerializer::Serializable)
-      output = {}
-      _serialize [[model, output]], attributes, context, include_id
-      output
-    else
-      sets = model.to_a.map do |record|
-        [record, {}]
-      end
-      _serialize sets, attributes, context, include_id
-      sets.map(&:last)
-    end
+  def self.with_namespaces(namespaces)
+    namespaces_was = Thread.current[:ar_serializer_current_namespaces]
+    Thread.current[:ar_serializer_current_namespaces] = namespaces
+    yield
   ensure
-    Thread.current[:ar_serializer_current_namespaces] = nil
+    Thread.current[:ar_serializer_current_namespaces] = namespaces_was
+  end
+
+  def self.serialize(model, args, context: nil, include_id: false, use: nil)
+    with_namespaces use do
+      attributes = parse_args(args)[:attributes]
+      if model.is_a?(ArSerializer::Serializable)
+        output = {}
+        _serialize [[model, output]], attributes, context, include_id
+        output
+      else
+        sets = model.to_a.map do |record|
+          [record, {}]
+        end
+        _serialize sets, attributes, context, include_id
+        sets.map(&:last)
+      end
+    end
   end
 
   def self._serialize(mixed_value_outputs, attributes, context, include_id, only = nil, except = nil)
@@ -77,16 +84,16 @@ module ArSerializer::Serializer
       preloader_values = preloader_params.compact.uniq.map do |key|
         preloader, params = key
         if preloader.arity < 0
-          [key, preloader.call(models, context, params)]
+          [key, preloader.call(models, context, params || {})]
         else
-          [key, preloader.call(*[models, context, params].take(preloader.arity))]
+          [key, preloader.call(*[models, context, params || {}].take(preloader.arity))]
         end
       end.to_h
 
       if defaults
         preloadeds = defaults.preloaders.map { |p| preloader_values[[p]] } || []
         value_outputs.each do |value, output|
-          data = value.instance_exec(*preloadeds, context, nil, &defaults.data_block)
+          data = value.instance_exec(*preloadeds, context, {}, &defaults.data_block)
           output.update data
         end
       end
@@ -99,7 +106,7 @@ module ArSerializer::Serializer
         preloadeds = info.preloaders.map { |p| preloader_values[[p, params]] } || []
         data_block = info.data_block
         value_outputs.each do |value, output|
-          child = value.instance_exec(*preloadeds, context, params, &data_block)
+          child = value.instance_exec(*preloadeds, context, params || {}, &data_block)
           if child.is_a?(Array) && child.all? { |el| el.is_a? ArSerializer::Serializable }
             output[column_name] = child.map do |record|
               data = {}
@@ -135,7 +142,7 @@ module ArSerializer::Serializer
     when Array
       params.map { |v| deep_with_indifferent_access v }
     when Hash
-      params.with_indifferent_access.transform_values! do |v|
+      params.transform_keys(&:to_sym).transform_values! do |v|
         deep_with_indifferent_access v
       end
     else
@@ -154,7 +161,7 @@ module ArSerializer::Serializer
         arg.each do |key, value|
           sym_key = key.to_sym
           if only_attributes
-            attributes[sym_key] = parse_args(value)
+            attributes[sym_key] = value == true ? {} : parse_args(value)
             next
           end
           if sym_key == :as
@@ -164,7 +171,7 @@ module ArSerializer::Serializer
           elsif sym_key == :params
             params = deep_with_indifferent_access value
           else
-            attributes[sym_key] = parse_args(value)
+            attributes[sym_key] = value == true ? {} : parse_args(value)
           end
         end
       else
@@ -172,6 +179,6 @@ module ArSerializer::Serializer
       end
     end
     return attributes if only_attributes
-    { attributes: attributes, column_name: column_name, params: params }
+    { attributes: attributes, column_name: column_name, params: params || {} }
   end
 end
