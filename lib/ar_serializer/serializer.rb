@@ -59,14 +59,14 @@ module ArSerializer::Serializer
       next unless klass.respond_to? :_serializer_field_info
       models = value_outputs.map(&:first)
       value_outputs.each { |value, output| output[:id] = value.id } if include_id && klass.method_defined?(:id)
-      if attributes[:*]
+      if attributes.any? { |k, _| k == :* }
         all_keys = klass._serializer_field_keys.map(&:to_sym)
         all_keys &= only.map(&:to_sym) if only
         all_keys -= except.map(&:to_sym) if except
-        attributes = all_keys.map { |k| [k, {}] }.to_h.merge attributes
-        attributes.delete :*
+        attributes = all_keys.map { |k| [k, {}] } + attributes
+        attributes.reject! { |k, _| k == :* }
       end
-      attributes.each_key do |name|
+      attributes.each do |name, _|
         field = klass._serializer_field_info name
         raise ArSerializer::InvalidQuery, "No serializer field `#{name}`#{" namespaces: #{current_namespaces}" if current_namespaces} for #{klass}" unless field
         ActiveRecord::Associations::Preloader.new.preload models, field.includes if field.includes.present?
@@ -151,27 +151,23 @@ module ArSerializer::Serializer
   end
 
   def self.parse_args(args, only_attributes: false)
-    attributes = {}
+    attributes = []
     params = nil
     column_name = nil
     (args.is_a?(Array) ? args : [args]).each do |arg|
       if arg.is_a?(Symbol) || arg.is_a?(String)
-        attributes[arg.to_sym] = {}
+        attributes << [arg.to_sym, {}]
       elsif arg.is_a? Hash
         arg.each do |key, value|
           sym_key = key.to_sym
-          if only_attributes
-            attributes[sym_key] = value == true ? {} : parse_args(value)
-            next
-          end
-          if sym_key == :as
+          if !only_attributes && sym_key == :as
             column_name = value
-          elsif sym_key == :attributes
-            attributes.update parse_args(value, only_attributes: true)
-          elsif sym_key == :params
+          elsif !only_attributes && sym_key == :attributes
+            attributes.concat parse_args(value, only_attributes: true)
+          elsif !only_attributes && sym_key == :params
             params = deep_with_indifferent_access value
           else
-            attributes[sym_key] = value == true ? {} : parse_args(value)
+            attributes << [sym_key, value == true ? {} : parse_args(value)]
           end
         end
       else

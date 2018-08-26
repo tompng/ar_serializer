@@ -72,7 +72,7 @@ class ArSerializer::Field
 
   def validate_attributes(attributes)
     return unless @only || @except
-    keys = attributes.keys.map(&:to_s) - ['*']
+    keys = attributes.map(&:first).map(&:to_s) - ['*']
     return unless (@only && (keys - @only).present?) || (@except && (keys & @except).present?)
     invalid_keys = [*(@only && keys - @only), *(@except && keys & @except)].uniq
     raise ArSerializer::InvalidQuery, "unpermitted attribute: #{invalid_keys}"
