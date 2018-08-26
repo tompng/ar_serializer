@@ -161,7 +161,7 @@ module ArSerializer::Serializer
         arg.each do |key, value|
           sym_key = key.to_sym
           if only_attributes
-            attributes[sym_key] = parse_args(value)
+            attributes[sym_key] = value == true ? {} : parse_args(value)
             next
           end
           if sym_key == :as
@@ -171,7 +171,7 @@ module ArSerializer::Serializer
           elsif sym_key == :params
             params = deep_with_indifferent_access value
           else
-            attributes[sym_key] = parse_args(value)
+            attributes[sym_key] = value == true ? {} : parse_args(value)
           end
         end
       else

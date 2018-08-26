@@ -29,8 +29,12 @@ class ArSerializerTest < Minitest::Test
     queries = [
       :title,
       [:title],
+      { title: {} },
+      { title: true },
       { attributes: :title },
-      { attributes: [:title] }
+      { attributes: [:title] },
+      { attributes: { title: {} } },
+      { attributes: { title: true } }
     ]
     queries.each do |query|
       assert_equal expected, ArSerializer.serialize(post, query)
