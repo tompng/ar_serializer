@@ -1,12 +1,4 @@
 module ArSerializer::GraphQL
-  class NamedObject
-    include ::ArSerializer::Serializable
-    attr_reader :name
-    def initialize(name)
-      @name = name
-    end
-    serializer_field :name
-  end
   class ArgClass
     include ::ArSerializer::Serializable
     attr_reader :name, :type
@@ -19,6 +11,7 @@ module ArSerializer::GraphQL
     serializer_field(:defaultValue) { nil }
     serializer_field(:description) { '' }
   end
+
   class FieldClass
     include ::ArSerializer::Serializable
     attr_reader :name, :field
@@ -51,9 +44,10 @@ module ArSerializer::GraphQL
 
   class SchemaClass
     include ::ArSerializer::Serializable
-    attr_reader :klass
+    attr_reader :klass, :query_type
     def initialize(klass)
       @klass = klass
+      @query_type = SerializableTypeClass.new klass
     end
 
     def collect_types
@@ -71,19 +65,14 @@ module ArSerializer::GraphQL
       collect_types.map { |type| TypeClass.from type }
     end
 
-    def name
-      klass.name.delete ':'
-    end
-    serializer_field(:queryType) { NamedObject.new name }
     serializer_field(:mutationType) { nil }
     serializer_field(:subscriptionType) { nil }
     serializer_field(:directives) { [] }
-    serializer_field :types
+    serializer_field :types, :queryType
   end
 
   class TypeClass
     include ::ArSerializer::Serializable
-    include ::ArSerializer
     attr_reader :type
     def initialize(type)
       @type = type

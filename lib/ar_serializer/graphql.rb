@@ -24,7 +24,7 @@ module ArSerializer::GraphQL
     end
     <<~SCHEMA
       schema {
-        query: #{schema.name}
+        query: #{schema.query_type.name}
       }
 
       #{definitions.map(&:strip).join("\n\n")}
