@@ -17,7 +17,7 @@ module ArSerializer::GraphQL
     serializer_field :name
     serializer_field :type, except: :fields
     serializer_field(:defaultValue) { nil }
-    serializer_field(:description) { nil }
+    serializer_field(:description) { '' }
   end
   class FieldClass
     include ::ArSerializer::Serializable
@@ -44,9 +44,9 @@ module ArSerializer::GraphQL
 
     serializer_field :name, :args
     serializer_field :type, except: :fields
-    %i[description isDeprecated deprecationReason].each do |name|
-      serializer_field(name) { nil }
-    end
+    serializer_field(:isDeprecated) { false }
+    serializer_field(:description) { '' }
+    serializer_field(:deprecationReason) { nil }
   end
 
   class SchemaClass
