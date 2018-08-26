@@ -91,13 +91,9 @@ class ArSerializer::Field
   end
 
   def self.type_from_column_type(klass, name)
-    column = klass.column_for_attribute name
     type = type_from_attribute_type klass, name.to_s
-    if type.nil? || column.null
-      type
-    else
-      :"#{type}!"
-    end
+    return if type.nil?
+    klass.column_for_attribute(name).null ? type : :"#{type}!"
   end
 
   def self.type_from_attribute_type(klass, name)
