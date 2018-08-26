@@ -318,6 +318,13 @@ class ArSerializerTest < Minitest::Test
           bar(aa: #{random_json.call(4).to_json}, bb: #{random_json.call(4).to_json})
         }
       }
+      query Xyz($n: [[Int!]!]!) {
+        ...Frag
+      }
+      fragment Frag on FooBar {
+        aa
+        bb
+      }
     )
     ArSerializer::GraphQL::Parser.parse query
   end
