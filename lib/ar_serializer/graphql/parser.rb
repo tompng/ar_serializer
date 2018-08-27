@@ -80,7 +80,7 @@ class ArSerializer::GraphQL::Parser
         end
       end
       chars.shift
-      JSON.parse %("#{s}")
+      unescape_string s
     when '['
       chars.shift
       result = []
@@ -112,6 +112,12 @@ class ArSerializer::GraphQL::Parser
     else
       :none
     end
+  end
+
+  def unescape_string(s)
+    JSON.parse %("#{s}")
+  rescue JSON::ParserError # for old json gem
+    JSON.parse(%(["#{s}"])).first
   end
 
   def parse_arg_fields
