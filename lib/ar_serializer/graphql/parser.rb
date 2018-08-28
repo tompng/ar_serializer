@@ -1,4 +1,6 @@
 class ArSerializer::GraphQL::Parser
+  class ParseError < StandardError; end
+
   attr_reader :query, :operation_name, :variables, :chars
   def initialize(query, operation_name: nil, variables: {})
     @query = query
@@ -18,7 +20,12 @@ class ArSerializer::GraphQL::Parser
       break unless definition
       definitions << definition
     end
-    raise unless chars.empty?
+    unless chars.empty?
+      raise(
+        ParseError,
+        "expected end of input or definition #{current_position_message}"
+      )
+    end
 
     query = definitions.find do |definition|
       next unless definition[:type] == 'query'
@@ -43,6 +50,14 @@ class ArSerializer::GraphQL::Parser
     return false unless chars.take(s.size).join == s
     chars.shift s.size
     true
+  end
+
+  def consume_text!(s)
+    return if consume_text s
+    raise(
+      ParseError,
+      "expected #{s.inspect} but found #{chars.first.inspect} #{current_position_message}"
+    )
   end
 
   def parse_name
@@ -90,12 +105,12 @@ class ArSerializer::GraphQL::Parser
         break if value == :none
         result << value
       end
-      raise unless consume_text ']'
+      consume_text! ']'
       result
     when '{'
       chars.shift
       result = parse_arg_fields
-      raise unless consume_text '}'
+      consume_text! '}'
       result
     when '$'
       chars.shift
@@ -127,10 +142,15 @@ class ArSerializer::GraphQL::Parser
       name = parse_name
       break unless name
       consume_blank
-      raise unless consume_text ':'
+      consume_text! ':'
       consume_blank
       value = parse_arg_value
-      raise if value == :none
+      if value == :none
+        raise(
+          ParseError,
+          "expected hash value but nothing found #{current_position_message}"
+        )
+      end
       result[name] = value
       consume_blank
       consume_text ','
@@ -143,7 +163,7 @@ class ArSerializer::GraphQL::Parser
   def parse_args
     return unless consume_text '('
     args = parse_arg_fields
-    raise unless consume_text ')'
+    consume_text! ')'
     args
   end
 
@@ -173,7 +193,7 @@ class ArSerializer::GraphQL::Parser
       break unless name
       fields[name] = field
     end
-    raise unless consume_text '}'
+    consume_text! '}'
     fields
   end
 
@@ -189,12 +209,24 @@ class ArSerializer::GraphQL::Parser
     { type: type, args: args, fields: fields }
   end
 
+  def current_position_message
+    pos = query.size - chars.size
+    code = query[[pos - 10, 0].max..pos + 10]
+    line_num = 0
+    query.each_line.with_index 1 do |l, i|
+      line_num = i
+      break if pos < l.size
+      pos -= l.size
+    end
+    "at #{line_num}:#{pos} near #{code.inspect}"
+  end
+
   def embed_fragment(fields, fragments)
     output = {}
     fields.each do |key, value|
       if value.is_a?(Hash) && (fragment_name = value[:fragment])
         fragment = fragments[fragment_name]
-        extract_fragment fragment, fragments
+        extract_fragment fragment_name, fragments
         output.update fragment[:fields]
       else
         output[key] = value
@@ -206,8 +238,10 @@ class ArSerializer::GraphQL::Parser
     output
   end
 
-  def extract_fragment(fragment, fragments)
-    raise if fragment[:state] == :start
+  def extract_fragment(fragment_name, fragments)
+    fragment = fragments[fragment_name]
+    raise ParseError, "fragment named #{fragment_name.inspect} was not found" if fragment.nil?
+    raise ParseError, "fragment circular definition detected in #{fragment_name.inspect}" if fragment[:state] == :start
     return if fragment[:state] == :done
     fragment[:state] = :start
     fragment[:fields] = embed_fragment fragment[:fields], fragments
