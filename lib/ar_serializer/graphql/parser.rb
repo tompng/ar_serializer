@@ -39,11 +39,11 @@ class ArSerializer::GraphQL::Parser
   private
 
   def consume_blank
-    chars.shift while chars.first == ' ' || chars.first == "\n"
+    chars.shift while chars.first&.match?(/\s/)
   end
 
   def consume_space
-    chars.shift while chars.first == ' '
+    chars.shift while chars.first&.match?(/ |\t/)
   end
 
   def consume_text(s)
