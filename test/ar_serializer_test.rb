@@ -312,18 +312,19 @@ class ArSerializerTest < Minitest::Test
       end
     end
     query = %(
+      # comment
       {
         user(aa: #{random_json.call(4).to_json}) {
-          foo()
+          foo() # comment
           bar(aa: #{random_json.call(4).to_json}, bb: #{random_json.call(4).to_json})
         }
-      }
+      },
       query Xyz($n: [[Int!]!]!) {
         ...Frag
       }
       fragment Frag on FooBar {
         aa(id: $n)
-        bb
+        bb, cc
       }
     )
     ArSerializer::GraphQL::Parser.parse query, operation_name: 'Xyz', variables: { 'n' => 1 }

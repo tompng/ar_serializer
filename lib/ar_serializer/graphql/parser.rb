@@ -15,22 +15,21 @@ class ArSerializer::GraphQL::Parser
 
   def parse
     definitions = []
+    consume_blank
     loop do
       definition = parse_definition
+      consume_blank
+      consume_text ','
+      consume_blank
       break unless definition
       definitions << definition
     end
-    unless chars.empty?
-      raise(
-        ParseError,
-        "expected end of input or definition #{current_position_message}"
-      )
-    end
-
+    raise_expected_not_found 'definition or EOF' unless chars.empty?
     query = definitions.find do |definition|
       next unless definition[:type] == 'query'
       operation_name.nil? || operation_name == definition[:args].first
     end
+    raise ParseError, 'empty query' unless query
     fragments = definitions.select { |definition| definition[:type] == 'fragment' }
     fragments_by_name = fragments.index_by { |frag| frag[:args].first }
     embed_fragment query[:fields], fragments_by_name
@@ -38,12 +37,21 @@ class ArSerializer::GraphQL::Parser
 
   private
 
-  def consume_blank
-    chars.shift while chars.first&.match?(/\s/)
+  def consume_comment
+    return false if chars.first != '#'
+    until chars.blank?
+      c = chars.first
+      break if c == "\n"
+      chars.shift
+    end
+    true
   end
 
-  def consume_space
-    chars.shift while chars.first&.match?(/ |\t/)
+  def consume_blank
+    loop do
+      chars.shift while chars.first&.match?(/\s/)
+      return unless consume_comment
+    end
   end
 
   def consume_text(s)
@@ -54,9 +62,13 @@ class ArSerializer::GraphQL::Parser
 
   def consume_text!(s)
     return if consume_text s
+    raise_expected_not_found s.inspect
+  end
+
+  def raise_expected_not_found(expected, found = nil)
     raise(
       ParseError,
-      "expected #{s.inspect} but found #{chars.first.inspect} #{current_position_message}"
+      "expected #{expected} but found #{found || chars.first.inspect} #{current_position_message}"
     )
   end
 
@@ -69,9 +81,9 @@ class ArSerializer::GraphQL::Parser
   def parse_name_alias
     name = parse_name
     return unless name
-    consume_space
+    consume_blank
     if consume_text ':'
-      consume_space
+      consume_blank
       [parse_name, name]
     else
       name
@@ -79,7 +91,6 @@ class ArSerializer::GraphQL::Parser
   end
 
   def parse_arg_value
-    consume_blank
     case chars.first
     when '"'
       chars.shift
@@ -100,7 +111,9 @@ class ArSerializer::GraphQL::Parser
       chars.shift
       result = []
       loop do
+        consume_blank
         value = parse_arg_value
+        consume_blank
         consume_text ','
         break if value == :none
         result << value
@@ -109,7 +122,9 @@ class ArSerializer::GraphQL::Parser
       result
     when '{'
       chars.shift
+      consume_blank
       result = parse_arg_fields
+      consume_blank
       consume_text! '}'
       result
     when '$'
@@ -136,7 +151,6 @@ class ArSerializer::GraphQL::Parser
   end
 
   def parse_arg_fields
-    consume_blank
     result = {}
     loop do
       name = parse_name
@@ -156,13 +170,14 @@ class ArSerializer::GraphQL::Parser
       consume_text ','
       consume_blank
     end
-    consume_blank
     result
   end
 
   def parse_args
     return unless consume_text '('
+    consume_blank
     args = parse_arg_fields
+    consume_blank
     consume_text! ')'
     args
   end
@@ -175,20 +190,21 @@ class ArSerializer::GraphQL::Parser
     end
     name, alias_name = parse_name_alias
     return unless name
-    consume_space
+    consume_blank
     args = parse_args
-    consume_space
+    consume_blank
     fields = parse_fields
     [name, { as: alias_name, params: args, attributes: fields }.compact]
   end
 
   def parse_fields
-    consume_blank
     return unless consume_text '{'
     consume_blank
     fields = {}
     loop do
       name, field = parse_field
+      consume_blank
+      consume_text ','
       consume_blank
       break unless name
       fields[name] = field
@@ -198,14 +214,17 @@ class ArSerializer::GraphQL::Parser
   end
 
   def parse_definition
+    type = parse_name
     consume_blank
-    definition_types = ''
-    definition_types << chars.shift while chars.first&.match?(/[^{}]/)
+    args_text = ''
+    if type
+      args_text << chars.shift while chars.first && chars.first != '{'
+    end
+    args = args_text.split(/[\s()]+/)
     fields = parse_fields
-    consume_blank
-    return unless fields
-    type, *args = definition_types.split(/[\s()]+/)
+    return if type.nil? && fields.nil?
     type ||= 'query'
+    raise_expected_not_found '{'.inspect if fields.nil?
     { type: type, args: args, fields: fields }
   end
 
