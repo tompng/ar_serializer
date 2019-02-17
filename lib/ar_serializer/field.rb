@@ -15,13 +15,21 @@ class ArSerializer::Field
 
   def type
     type = @type.is_a?(Proc) ? @type.call : @type
-    if type.is_a? String
-      Object.const_get type
-    elsif type.is_a?(Array) && type.size == 1 && type.first.is_a?(String)
-      [Object.const_get(type.first)]
-    else
-      type
-    end
+    splat = ->(t) {
+      case t
+      when String
+        Object.const_get(t)
+      when Array
+        t.map do |v|
+          t.size >= 2 && v.is_a?(String) ? v : splat.call(v)
+        end
+      when Hash
+        t.transform_values(&splat)
+      else
+        t
+      end
+    }
+    splat.call type
   end
 
   def arguments
@@ -36,7 +44,7 @@ class ArSerializer::Field
     any = false
     parameters_list.each do |parameters|
       ftype, fname = parameters.first
-      if %i[opt req].include? ftype
+      if %i[opt req rest].include? ftype
         any = true unless fname.match?(/^_/)
         next
       end
@@ -53,12 +61,12 @@ class ArSerializer::Field
         end
       end
     end
-    arguments[:any] = false if any
+    return :any if any && arguments.empty?
     arguments.map do |key, req|
-      type = key.to_s.match?(/^(.+_)?id|Id$/) ? :int : nil
+      type = key.to_s.match?(/^(.+_)?id|Id$/) ? :int : :any
       name = key.to_s.underscore
       type = [type] if name.singularize.pluralize == name
-      [key, req ? { type => :required } : type]
+      [req ? key : "#{key}?", type]
     end.to_h
   end
 
@@ -77,7 +85,7 @@ class ArSerializer::Field
     data_block = lambda do |preloaded, _context, _params|
       preloaded[id] || 0
     end
-    new preloaders: [preloader], data_block: data_block, type: :int!
+    new preloaders: [preloader], data_block: data_block, type: :int
   end
 
   def self.top_n_loader_available?
@@ -92,8 +100,8 @@ class ArSerializer::Field
 
   def self.type_from_column_type(klass, name)
     type = type_from_attribute_type klass, name.to_s
-    return if type.nil?
-    klass.column_for_attribute(name).null ? type : :"#{type}!"
+    return :any if type.nil?
+    klass.column_for_attribute(name).null ? [type, nil] : type
   end
 
   def self.type_from_attribute_type(klass, name)
@@ -131,14 +139,22 @@ class ArSerializer::Field
     underscore_name = name.to_s.underscore
     association = klass.reflect_on_association underscore_name if klass.respond_to? :reflect_on_association
     if association
-      type ||= -> { association.collection? ? [association.klass] : association.klass }
+      if association.collection?
+        type ||= -> { [association.klass] }
+      elsif (association.belongs_to? && association.options[:optional] == true) || (association.has_one? && association[:required] != true)
+        type ||= -> { [association.klass, nil] }
+      else
+        type ||= -> { association.klass }
+      end
       return association_field klass, underscore_name, only: only, except: except, type: type, collection: association.collection? if !includes && !preload && !data_block && !params_type
     end
     type ||= lambda do
       if klass.respond_to? :column_for_attribute
         type_from_column_type klass, underscore_name
       elsif klass.respond_to? :attribute_types
-        type_from_attribute_type klass, underscore_name
+        type_from_attribute_type(klass, underscore_name) || :any
+      else
+        :any
       end
     end
     custom_field klass, underscore_name, includes: includes, preload: preload, only: only, except: except, order_column: order_column, type: type, params_type: params_type, &data_block
@@ -188,7 +204,7 @@ class ArSerializer::Field
       preloader = lambda do |models, _context, limit: nil, order: nil, **_option|
         preload_association klass, models, name, limit: limit, order: order
       end
-      params_type = { limit: :int, order: :any }
+      params_type = { limit?: :int, order?: [{ :* => %w[asc desc] }, 'asc', 'desc'] }
     else
       preloader = lambda do |models, _context, _params|
         preload_association klass, models, name
