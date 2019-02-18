@@ -293,6 +293,8 @@ class ArSerializerTest < Minitest::Test
     assert result['data']['user']['PS']
     graphiql_query_path = File.join File.dirname(__FILE__), 'graphiql_query'
     assert ArSerializer::GraphQL.serialize(schema.new, File.read(graphiql_query_path)).as_json
+    assert ArSerializer::TypeScript.generate_type_definition(schema)
+    assert ArSerializer::TypeScript.generate_query_builder(schema)
   end
 
   def test_graphql_query_parse

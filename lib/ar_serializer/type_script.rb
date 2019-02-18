@@ -1,7 +1,7 @@
 require_relative 'graphql'
 
 module ArSerializer::TypeScript
-  def self.generate_type_definition_ts(*classes)
+  def self.generate_type_definition(*classes)
     all_classes = all_related_classes classes.flatten
     [
       all_classes.map { |k| data_type_definition k },
@@ -9,7 +9,7 @@ module ArSerializer::TypeScript
     ].join "\n"
   end
 
-  def self.generate_query_builder_ts(*classes)
+  def self.generate_query_builder(*classes)
     all_classes = all_related_classes classes.flatten
     finfo = all_classes.map { |k| data_type_object_definition k }.to_h
     finfo_type = '{ [key: string]: { [key: string]: (true | DataTypeName) } }'
