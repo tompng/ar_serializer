@@ -102,6 +102,8 @@ module ArSerializer::GraphQL
 
     def fields; end
 
+    def sample; end
+
     def ts_type; end
 
     def association_type; end
@@ -165,6 +167,21 @@ module ArSerializer::GraphQL
       type
     end
 
+    def sample
+      case ts_type
+      when 'number'
+        0
+      when 'string'
+        ''
+      when 'boolean'
+        true
+      when 'any'
+        nil
+      else
+        type
+      end
+    end
+
     def ts_type
       case type
       when :int, :float
@@ -200,10 +217,17 @@ module ArSerializer::GraphQL
         t = TypeClass.from(v).association_type
         return t if t
       end
+      nil
     end
 
     def gql_type
       'OBJECT'
+    end
+
+    def sample
+      type.reject { |k| k.to_s.ends_with? '?' }.transform_values do |v|
+        TypeClass.from(v).sample
+      end
     end
 
     def ts_type
@@ -274,6 +298,10 @@ module ArSerializer::GraphQL
       of_type.gql_type
     end
 
+    def sample
+      nil
+    end
+
     def ts_type
       "(#{of_type.ts_type} | null)"
     end
@@ -298,6 +326,10 @@ module ArSerializer::GraphQL
 
     def gql_type
       kind
+    end
+
+    def sample
+      of_types.first.sample
     end
 
     def ts_type
@@ -328,6 +360,10 @@ module ArSerializer::GraphQL
 
     def gql_type
       "[#{of_type.gql_type}]"
+    end
+
+    def sample
+      [of_type.sample]
     end
 
     def ts_type

@@ -11,11 +11,11 @@ module ArSerializer::TypeScript
 
   def self.generate_query_builder(*classes)
     all_classes = all_related_classes classes.flatten
-    finfo = all_classes.map { |k| data_type_object_definition k }.to_h
-    finfo_type = '{ [key: string]: { [key: string]: (true | DataTypeName) } }'
+    dinfo = all_classes.map { |k| data_type_object_definition k }
     <<~CODE
-      type DataTypeName = #{finfo.keys.map(&:to_json).join(' | ')}
-      const definitions: #{finfo_type} = #{finfo.to_json}
+      export const definitions = {
+      #{dinfo.join(",\n").lines.map { |l| "  #{l}" }.join}
+      }
       #{QueryBuilderScript}
     CODE
   end
@@ -48,24 +48,42 @@ module ArSerializer::TypeScript
 
   def self.data_type_object_definition(klass)
     type = ArSerializer::GraphQL::TypeClass.from klass
-    field_definitions = type.fields.map do |field|
+    fields = {}
+    children = {}
+    type.fields.map do |field|
       association_type = field.type.association_type
       if association_type
-        [field.name, association_type.name]
+        children[field.name] = association_type
       else
-        [field.name, true]
+        fields[field.name] = field.type
       end
     end
-    [type.name, field_definitions.to_h]
+    <<~DEFS.strip
+      #{type.name}: {
+        fields: {
+      #{fields.map { |k, t| "    #{k}: #{t.sample.to_json} as #{t.ts_type}" }.join(",\n")}
+        },
+        children: {
+      #{children.map { |k, t| "    #{k}: #{t.name.to_json}" }.join(",\n")}
+        }
+      }
+    DEFS
+  rescue => e
+    binding.pry
   end
 
   def self.data_type_definition(klass)
     type = ArSerializer::GraphQL::TypeClass.from klass
     field_definitions = []
+    params = []
     type.fields.each do |field|
       field_definitions << "#{field.name}?: #{field.type.ts_type}"
-      next if field.args.empty?
-      field_definitions << "#{field.name}Params?: #{field.args_ts_type}"
+      params << "#{field.name}?: #{field.args_ts_type}" unless field.args.empty?
+    end
+    unless params.empty?
+      field_definitions << '_params?: {'
+      params.each { |p| field_definitions << "  #{p}" }
+      field_definitions << '}'
     end
     field_definitions << "_meta?: { name: '#{type.name}'; query: Type#{type.name}QueryBase }"
     <<~TYPE
@@ -86,24 +104,23 @@ module ArSerializer::TypeScript
 
   QueryBuilderScript = <<~CODE
     type Meta = { query: {}; name: string }
-    type DataTypeBase = { _meta?: Meta }
+    type DataTypeBase = { _meta?: Meta, _params?: { [key: string]: any } }
     export function buildQuery<DataType extends DataTypeBase>(
       name: (DataType['_meta'] & Meta)['name'],
       data: DataType
     ): (DataType['_meta'] & Meta)['query'] {
-      const defs = definitions[name]
+      const defs = definitions[name as any]
+      if (!defs) return {} as any
       const query: { [key: string]: any } = {}
       for (const fieldName in data) {
-        const paramsPattern = /Params$/
-        if (fieldName.match(paramsPattern) && data[fieldName.replace(paramsPattern, '')]) continue
-        const params = data[fieldName + 'Params']
-        let fieldValue = data[fieldName]
-        const fieldType = defs[fieldName]
-        if (!fieldType) continue
-        if (fieldType === true) {
+        const params = data._params && data._params[fieldName]
+        if (defs.fields[fieldName] !== undefined) {
           query[fieldName] = params ? { params } : true
           continue
         }
+        const fieldType = defs.children[fieldName]
+        if (!fieldType) continue
+        let fieldValue = data[fieldName]
         if (fieldValue instanceof Array) {
           if (fieldValue.length === 0) {
             query[fieldName] = true
