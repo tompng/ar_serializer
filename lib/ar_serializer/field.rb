@@ -141,7 +141,7 @@ class ArSerializer::Field
     if association
       if association.collection?
         type ||= -> { [association.klass] }
-      elsif (association.belongs_to? && association.options[:optional] == true) || (association.has_one? && association[:required] != true)
+      elsif (association.belongs_to? && association.options[:optional] == true) || (association.has_one? && association.options[:required] != true)
         type ||= -> { [association.klass, nil] }
       else
         type ||= -> { association.klass }

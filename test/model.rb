@@ -71,9 +71,11 @@ end
 class Comment < ActiveRecord::Base
   belongs_to :user
   belongs_to :post
+  has_one :star
   has_many :stars
   serializer_field :id, :body, :user, :stars
   serializer_field :stars_count, count_of: :stars
+  serializer_field :star
 
   define_preloader :star_count_loader do |comments|
     Star.where(comment_id: comments.map(&:id)).group(:comment_id).count
