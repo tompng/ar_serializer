@@ -129,7 +129,19 @@ ArSerializer.serialize user, o_posts: :*, e_posts: :*
 ArSerializer.serialize user, o_posts: :body #=> Error
 ArSerializer.serialize user, e_posts: :comments #=> Error
 
-# type annotation and graphql
+# types
+class User < ActiveRecord::Base
+  serializer_field(:posts, params_type: { title: :string? }) do |title: nil|
+    title ? posts.where(title: title) : posts
+  end
+  serializer_field :foobar, type: ['foo', 'bar', { foobar: [:string, nil] }] do
+    ['foo', 'bar', { foobar: nil }, { foobar: 'foobar' }].sample
+  end
+end
+ArSerializer::TypeScript.generate_type_definition User
+# => export type TypeUser {...}; export type TypePost {...}; ...
+
+# graphql
 class MySchema
   include ArSerializer::Serializable
   serializer_field :post, type: Post do |context, id:|
