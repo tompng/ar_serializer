@@ -9,7 +9,7 @@ module ArSerializer::GraphQL
     serializer_field :name
     serializer_field :type, except: :fields
     serializer_field(:defaultValue) { nil }
-    serializer_field(:description) { '' }
+    serializer_field(:description) { type.description }
   end
 
   class FieldClass
@@ -21,6 +21,7 @@ module ArSerializer::GraphQL
     end
 
     def args
+      return [] if field.arguments == :any
       field.arguments.map do |key, type|
         ArgClass.new key, type
       end
@@ -31,14 +32,22 @@ module ArSerializer::GraphQL
     end
 
     def collect_types(types)
+      types[:any] = true if field.arguments == :any
       args.each { |arg| arg.type.collect_types types }
       type.collect_types types
+    end
+
+    def args_ts_type
+      arg_types = field.arguments.map do |key, type|
+        "#{key}: #{TypeClass.from(type).ts_type}"
+      end
+      "{ #{arg_types.join '; '} }"
     end
 
     serializer_field :name, :args
     serializer_field :type, except: :fields
     serializer_field(:isDeprecated) { false }
-    serializer_field(:description) { '' }
+    serializer_field(:description) { type.description }
     serializer_field(:deprecationReason) { nil }
   end
 
@@ -56,13 +65,16 @@ module ArSerializer::GraphQL
         fc = FieldClass.new name, klass._serializer_field_info(name)
         fc.collect_types types
       end
-      strings, klasses = types.keys.partition { |t| t.is_a? String }
+      types, klasses = types.keys.partition { |t| t.is_a? Symbol }
       klasses << klass
-      strings.sort + klasses.sort_by(&:name)
+      [types.sort, klasses.sort_by(&:name)]
     end
 
     def types
-      collect_types.map { |type| TypeClass.from type }
+      types, klasses = collect_types
+      scalar_types = types.map { |t| ScalarTypeClass.new t }
+      klass_types = klasses.map { |t| SerializableTypeClass.new t }
+      scalar_types + klass_types
     end
 
     serializer_field(:mutationType) { nil }
@@ -81,7 +93,7 @@ module ArSerializer::GraphQL
     def collect_types(types); end
 
     def description
-      ''
+      ts_type
     end
 
     def name; end
@@ -89,6 +101,12 @@ module ArSerializer::GraphQL
     def of_type; end
 
     def fields; end
+
+    def sample; end
+
+    def ts_type; end
+
+    def association_type; end
 
     serializer_field :kind, :name, :description, :fields
     serializer_field :ofType, except: :fields
@@ -98,21 +116,23 @@ module ArSerializer::GraphQL
     end
 
     def self.from(type)
-      type = type.to_s if type.is_a?(Symbol)
-      type = type.capitalize if type.is_a?(String)
-      type = { type[0...-1] => :required } if type.is_a?(String) && type.ends_with?('!')
-      type = 'Any' if type.is_a?(String) && type.empty?
+      type = [type[0...-1].to_sym, nil] if type.is_a?(Symbol) && type.to_s.ends_with?('?')
+      type = [type[0...-1], nil] if type.is_a?(String) && type.ends_with?('?')
       case type
       when Class
         SerializableTypeClass.new type
-      when String
+      when Symbol, String, Numeric, true, false, nil
         ScalarTypeClass.new type
       when Array
-        ListTypeClass.new type.first
+        if type.size == 1
+          ListTypeClass.new(type.first)
+        elsif type.size == 2 && type.last.nil?
+          OptionalTypeClass.new type
+        else
+          OrTypeClass.new type
+        end
       when Hash
-        NonNullTypeClass.new type.keys.first
-      when nil
-        ScalarTypeClass.new 'Any'
+        HashTypeClass.new type
       end
     end
   end
@@ -123,15 +143,99 @@ module ArSerializer::GraphQL
     end
 
     def name
-      type
+      case type
+      when String, :string
+        :string
+      when Integer, :int
+        :int
+      when Float, :float
+        :float
+      when true, false, :boolean
+        :boolean
+      when :other
+        :other
+      else
+        :any
+      end
     end
 
     def collect_types(types)
       types[name] = true
     end
 
-    def inspect
+    def gql_type
       type
+    end
+
+    def sample
+      case ts_type
+      when 'number'
+        0
+      when 'string'
+        ''
+      when 'boolean'
+        true
+      when 'any'
+        nil
+      else
+        type
+      end
+    end
+
+    def ts_type
+      case type
+      when :int, :float
+        'number'
+      when :string, :number, :boolean
+        type.to_s
+      when Symbol
+        'any'
+      else
+        type.to_json
+      end
+    end
+  end
+
+  class HashTypeClass < TypeClass
+    def kind
+      'SCALAR'
+    end
+
+    def name
+      :other
+    end
+
+    def collect_types(types)
+      types[:other] = true
+      type.values.map do |v|
+        TypeClass.from(v).collect_types(types)
+      end
+    end
+
+    def association_type
+      type.values.each do |v|
+        t = TypeClass.from(v).association_type
+        return t if t
+      end
+      nil
+    end
+
+    def gql_type
+      'OBJECT'
+    end
+
+    def sample
+      type.reject { |k| k.to_s.ends_with? '?' }.transform_values do |v|
+        TypeClass.from(v).sample
+      end
+    end
+
+    def ts_type
+      fields = type.map do |key, value|
+        k = key.to_s == '*' ? '[key: string]' : key
+        "#{k}: #{TypeClass.from(value).ts_type}"
+      end
+      "{ #{fields.join('; ')} }"
     end
   end
 
@@ -156,13 +260,89 @@ module ArSerializer::GraphQL
       fields.each { |field| field.collect_types types }
     end
 
-    def inspect
+    def association_type
+      self
+    end
+
+    def gql_type
       name
+    end
+
+    def ts_type
+      "Type#{name}"
+    end
+  end
+
+  class OptionalTypeClass < TypeClass
+    def kind
+      of_type.kind
+    end
+
+    def name
+      of_type.name
+    end
+
+    def of_type
+      TypeClass.from type.first
+    end
+
+    def association_type
+      of_type.association_type
+    end
+
+    def collect_types(types)
+      of_type.collect_types types
+    end
+
+    def gql_type
+      of_type.gql_type
+    end
+
+    def sample
+      nil
+    end
+
+    def ts_type
+      "(#{of_type.ts_type} | null)"
+    end
+  end
+
+  class OrTypeClass < TypeClass
+    def kind
+      'OBJECT'
+    end
+
+    def name
+      'OBJECT'
+    end
+
+    def of_types
+      type.map { |t| TypeClass.from t }
+    end
+
+    def collect_types(types)
+      of_types.map { |t| t.collect_types types }
+    end
+
+    def gql_type
+      kind
+    end
+
+    def sample
+      of_types.first.sample
+    end
+
+    def ts_type
+      '(' + of_types.map(&:ts_type).join(' | ') + ')'
     end
   end
 
   class ListTypeClass < TypeClass
     def kind
+      'LIST'
+    end
+
+    def name
       'LIST'
     end
 
@@ -174,26 +354,20 @@ module ArSerializer::GraphQL
       of_type.collect_types types
     end
 
-    def inspect
-      "[#{of_type.inspect}]"
-    end
-  end
-
-  class NonNullTypeClass < TypeClass
-    def kind
-      'NON_NULL'
+    def association_type
+      of_type.association_type
     end
 
-    def of_type
-      TypeClass.from type
+    def gql_type
+      "[#{of_type.gql_type}]"
     end
 
-    def collect_types(types)
-      of_type.collect_types types
+    def sample
+      [of_type.sample]
     end
 
-    def inspect
-      "#{of_type.inspect}!"
+    def ts_type
+      "(#{of_type.ts_type} [])"
     end
   end
 end

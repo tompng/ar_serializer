@@ -12,6 +12,7 @@ class User < ActiveRecord::Base
   serializer_field(:favorite_post, type: 'FavoritePost') { FavoritePost.new id if id.odd? }
   serializer_field(
     :posts_with_total,
+    type: { total: :int, list: ['Post'] },
     preload: lambda do |models, _context, params|
       {
         list: ArSerializer::Field.preload_association(User, models, :posts, params),
@@ -37,7 +38,7 @@ class Post < ActiveRecord::Base
   serializer_field(:user_except_posts, except: :posts, type: User) { user }
   serializer_field :created_at, namespace: :aaa
   serializer_field :cmnts, association: :comments
-  serializer_field(:modifiedAt, order_column: :updated_at) { updated_at }
+  serializer_field(:modifiedAt, order_column: :updated_at, type: :string) { updated_at }
   serializer_field :createdAt
   serializer_field :Comments
 end
@@ -70,15 +71,17 @@ end
 class Comment < ActiveRecord::Base
   belongs_to :user
   belongs_to :post
+  has_one :star
   has_many :stars
   serializer_field :id, :body, :user, :stars
   serializer_field :stars_count, count_of: :stars
+  serializer_field :star
 
   define_preloader :star_count_loader do |comments|
     Star.where(comment_id: comments.map(&:id)).group(:comment_id).count
   end
 
-  serializer_field :stars_count_x5, type: :int!, preload: :star_count_loader do |preloaded|
+  serializer_field :stars_count_x5, type: :int, preload: :star_count_loader do |preloaded|
     (preloaded[id] || 0) * 5
   end
 

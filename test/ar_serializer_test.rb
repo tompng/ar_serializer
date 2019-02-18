@@ -264,6 +264,9 @@ class ArSerializerTest < Minitest::Test
       serializer_field :users, type: [User], params_type: { words: [:string] } do
         User.all
       end
+      serializer_field :__schema do
+        ArSerializer::GraphQL::SchemaClass.new self.class
+      end
     end
     query = %(
        {
@@ -288,6 +291,10 @@ class ArSerializerTest < Minitest::Test
     assert aaa_schema != bbb_schema
     result = ArSerializer::GraphQL.serialize(schema.new, query).as_json
     assert result['data']['user']['PS']
+    graphiql_query_path = File.join File.dirname(__FILE__), 'graphiql_query'
+    assert ArSerializer::GraphQL.serialize(schema.new, File.read(graphiql_query_path)).as_json
+    assert ArSerializer::TypeScript.generate_type_definition(schema)
+    assert ArSerializer::TypeScript.generate_query_builder(schema)
   end
 
   def test_graphql_query_parse
