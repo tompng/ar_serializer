@@ -23,9 +23,9 @@ module ArSerializer::TypeScript
   def self.query_type_definition(klass)
     type = ArSerializer::GraphQL::TypeClass.from klass
     field_definitions = type.fields.map do |field|
-      if field.type.association_type?
-        of_type = field.type.association_type
-        qname = "Type#{of_type.name}Query"
+      association_type = field.type.association_type
+      if association_type
+        qname = "Type#{association_type.name}Query"
         if field.args.empty?
           "#{field.name}?: true | #{qname} | { as?: string; attributes?: #{qname} }"
         else
@@ -49,8 +49,9 @@ module ArSerializer::TypeScript
   def self.data_type_object_definition(klass)
     type = ArSerializer::GraphQL::TypeClass.from klass
     field_definitions = type.fields.map do |field|
-      if field.type.association_type?
-        [field.name, field.type.association_type.name]
+      association_type = field.type.association_type
+      if association_type
+        [field.name, association_type.name]
       else
         [field.name, true]
       end

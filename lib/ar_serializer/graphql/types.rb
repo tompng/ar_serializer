@@ -104,9 +104,7 @@ module ArSerializer::GraphQL
 
     def ts_type; end
 
-    def association_type?
-      false
-    end
+    def association_type; end
 
     serializer_field :kind, :name, :description, :fields
     serializer_field :ofType, except: :fields
@@ -152,6 +150,8 @@ module ArSerializer::GraphQL
         :float
       when true, false, :boolean
         :boolean
+      when :other
+        :other
       else
         :any
       end
@@ -185,28 +185,20 @@ module ArSerializer::GraphQL
     end
 
     def name
-      :any
+      :other
     end
 
     def collect_types(types)
-      types[:any] = true
+      types[:other] = true
       type.values.map do |v|
         TypeClass.from(v).collect_types(types)
       end
     end
 
-    def association_type?
-      type.values.each do |v|
-        t = TypeClass.from(v)
-        return true if t.association_type?
-      end
-      false
-    end
-
     def association_type
       type.values.each do |v|
-        t = TypeClass.from(v)
-        return t.association_type if t.association_type?
+        t = TypeClass.from(v).association_type
+        return t if t
       end
     end
 
@@ -244,10 +236,6 @@ module ArSerializer::GraphQL
       fields.each { |field| field.collect_types types }
     end
 
-    def association_type?
-      true
-    end
-
     def association_type
       self
     end
@@ -272,10 +260,6 @@ module ArSerializer::GraphQL
 
     def of_type
       TypeClass.from type.first
-    end
-
-    def association_type?
-      of_type.association_type?
     end
 
     def association_type
@@ -336,10 +320,6 @@ module ArSerializer::GraphQL
 
     def collect_types(types)
       of_type.collect_types types
-    end
-
-    def association_type?
-      of_type.association_type?
     end
 
     def association_type
