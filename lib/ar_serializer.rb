@@ -74,3 +74,4 @@ ActiveRecord::Base.include ArSerializer::Serializable
 ActiveRecord::Relation.include ArSerializer::ArrayLikeCompositeValue
 
 require 'ar_serializer/graphql'
+require 'ar_serializer/type_script'

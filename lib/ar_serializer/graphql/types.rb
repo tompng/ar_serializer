@@ -37,6 +37,13 @@ module ArSerializer::GraphQL
       type.collect_types types
     end
 
+    def args_ts_type
+      arg_types = field.arguments.map do |key, type|
+        "#{key}: #{TypeClass.from(type).ts_type}"
+      end
+      "{ #{arg_types.join '; '} }"
+    end
+
     serializer_field :name, :args
     serializer_field :type, except: :fields
     serializer_field(:isDeprecated) { false }
@@ -96,6 +103,10 @@ module ArSerializer::GraphQL
     def fields; end
 
     def ts_type; end
+
+    def association_type?
+      false
+    end
 
     serializer_field :kind, :name, :description, :fields
     serializer_field :ofType, except: :fields
@@ -158,8 +169,10 @@ module ArSerializer::GraphQL
       case type
       when :int, :float
         'number'
-      when Symbol
+      when :string, :number, :boolean
         type.to_s
+      when Symbol
+        'any'
       else
         type.to_json
       end
@@ -182,13 +195,29 @@ module ArSerializer::GraphQL
       end
     end
 
+    def association_type?
+      type.values.each do |v|
+        t = TypeClass.from(v)
+        return true if t.association_type?
+      end
+      false
+    end
+
+    def association_type
+      type.values.each do |v|
+        t = TypeClass.from(v)
+        return t.association_type if t.association_type?
+      end
+    end
+
     def gql_type
       'OBJECT'
     end
 
     def ts_type
       fields = type.map do |key, value|
-        "#{key}: #{TypeClass.from(value).ts_type}"
+        k = key.to_s == '*' ? '[key: string]' : key
+        "#{k}: #{TypeClass.from(value).ts_type}"
       end
       "{ #{fields.join('; ')} }"
     end
@@ -215,12 +244,20 @@ module ArSerializer::GraphQL
       fields.each { |field| field.collect_types types }
     end
 
+    def association_type?
+      true
+    end
+
+    def association_type
+      self
+    end
+
     def gql_type
       name
     end
 
     def ts_type
-      name
+      "Type#{name}"
     end
   end
 
@@ -235,6 +272,14 @@ module ArSerializer::GraphQL
 
     def of_type
       TypeClass.from type.first
+    end
+
+    def association_type?
+      of_type.association_type?
+    end
+
+    def association_type
+      of_type.association_type
     end
 
     def collect_types(types)
@@ -291,6 +336,14 @@ module ArSerializer::GraphQL
 
     def collect_types(types)
       of_type.collect_types types
+    end
+
+    def association_type?
+      of_type.association_type?
+    end
+
+    def association_type
+      of_type.association_type
     end
 
     def gql_type

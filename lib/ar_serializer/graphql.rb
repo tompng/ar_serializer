@@ -11,7 +11,6 @@ module ArSerializer::GraphQL
     definitions = schema.types.map do |type|
       next "scalar #{type.name}" if type.is_a? ScalarTypeClass
       fields = type.fields.map do |field|
-        field.name
         args = field.args.map { |arg| "#{arg.name}: #{arg.type.gql_type}" }
         args_exp = "(#{args.join(', ')})" unless args.empty?
         "  #{field.name}#{args_exp}: #{field.type.gql_type}"
