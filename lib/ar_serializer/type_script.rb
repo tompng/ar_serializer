@@ -40,7 +40,7 @@ module ArSerializer::TypeScript
     base_query_type_name = "Type#{type.name}QueryBase"
     <<~TYPE
       export type #{query_type_name} = keyof (#{base_query_type_name}) | (keyof (#{base_query_type_name}))[] | #{base_query_type_name}
-      export type #{base_query_type_name} = {
+      export interface #{base_query_type_name} {
       #{field_definitions.map { |line| "  #{line}" }.join("\n")}
       }
     TYPE
@@ -87,7 +87,7 @@ module ArSerializer::TypeScript
     end
     field_definitions << "_meta?: { name: '#{type.name}'; query: Type#{type.name}QueryBase }"
     <<~TYPE
-      export type Type#{type.name} = {
+      export interface Type#{type.name} {
       #{field_definitions.map { |line| "  #{line}" }.join("\n")}
       }
     TYPE
@@ -103,8 +103,8 @@ module ArSerializer::TypeScript
   end
 
   QueryBuilderScript = <<~CODE
-    type Meta = { query: {}; name: string }
-    type DataTypeBase = { _meta?: Meta, _params?: { [key: string]: any } }
+    interface Meta { query: {}; name: string }
+    interface DataTypeBase { _meta?: Meta, _params?: { [key: string]: any } }
     export function buildQuery<DataType extends DataTypeBase>(
       name: (DataType['_meta'] & Meta)['name'],
       data: DataType
