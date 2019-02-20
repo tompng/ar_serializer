@@ -313,7 +313,7 @@ module ArSerializer::GraphQL
     end
 
     def name
-      'OBJECT'
+      :other
     end
 
     def of_types
@@ -321,6 +321,7 @@ module ArSerializer::GraphQL
     end
 
     def collect_types(types)
+      types[:other] = true
       of_types.map { |t| t.collect_types types }
     end
 
