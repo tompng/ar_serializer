@@ -2,16 +2,16 @@ require_relative 'graphql'
 
 module ArSerializer::TypeScript
   def self.generate_type_definition(*classes)
-    all_classes = all_related_classes classes.flatten
+    types = related_serializer_types classes.flatten
     [
-      all_classes.map { |k| data_type_definition k },
-      all_classes.map { |k| query_type_definition k }
+      types.map { |t| data_type_definition t },
+      types.map { |t| query_type_definition t }
     ].join "\n"
   end
 
   def self.generate_query_builder(*classes)
-    all_classes = all_related_classes classes.flatten
-    dinfo = all_classes.map { |k| data_type_object_definition k }
+    types = related_serializer_types classes.flatten
+    dinfo = types.map { |t| data_type_object_definition t }
     <<~CODE
       export const definitions = {
       #{dinfo.join(",\n").lines.map { |l| "  #{l}" }.join}
@@ -20,8 +20,7 @@ module ArSerializer::TypeScript
     CODE
   end
 
-  def self.query_type_definition(klass)
-    type = ArSerializer::GraphQL::TypeClass.from klass
+  def self.query_type_definition(type)
     field_definitions = type.fields.map do |field|
       association_type = field.type.association_type
       if association_type
@@ -46,8 +45,7 @@ module ArSerializer::TypeScript
     TYPE
   end
 
-  def self.data_type_object_definition(klass)
-    type = ArSerializer::GraphQL::TypeClass.from klass
+  def self.data_type_object_definition(type)
     fields = {}
     children = {}
     type.fields.map do |field|
@@ -72,8 +70,7 @@ module ArSerializer::TypeScript
     binding.pry
   end
 
-  def self.data_type_definition(klass)
-    type = ArSerializer::GraphQL::TypeClass.from klass
+  def self.data_type_definition(type)
     field_definitions = []
     params = []
     type.fields.each do |field|
@@ -93,13 +90,13 @@ module ArSerializer::TypeScript
     TYPE
   end
 
-  def self.all_related_classes(classes)
+  def self.related_serializer_types(classes)
     types_set = {}
     classes.each do |klass|
       type = ArSerializer::GraphQL::TypeClass.from klass
       type.collect_types types_set
     end
-    types_set.keys.grep(Class).sort_by { |k| k.name.delete ':' }
+    types_set.keys.grep(ArSerializer::GraphQL::TypeClass).sort_by(&:name)
   end
 
   QueryBuilderScript = <<~CODE

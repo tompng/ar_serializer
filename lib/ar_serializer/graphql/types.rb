@@ -28,7 +28,7 @@ module ArSerializer::GraphQL
     end
 
     def type
-      TypeClass.from field.type
+      TypeClass.from field.type, field.only, field.except
     end
 
     def collect_types(types)
@@ -65,16 +65,14 @@ module ArSerializer::GraphQL
         fc = FieldClass.new name, klass._serializer_field_info(name)
         fc.collect_types types
       end
-      types, klasses = types.keys.partition { |t| t.is_a? Symbol }
-      klasses << klass
-      [types.sort, klasses.sort_by(&:name)]
+      type_symbols, type_classes = types.keys.partition { |t| t.is_a? Symbol }
+      type_classes << TypeClass.from(klass)
+      [type_symbols.sort, type_classes.sort_by(&:name)]
     end
 
     def types
-      types, klasses = collect_types
-      scalar_types = types.map { |t| ScalarTypeClass.new t }
-      klass_types = klasses.map { |t| SerializableTypeClass.new t }
-      scalar_types + klass_types
+      types_symbols, klass_types = collect_types
+      types_symbols.map { |t| ScalarTypeClass.new t } + klass_types
     end
 
     serializer_field(:mutationType) { nil }
@@ -85,9 +83,11 @@ module ArSerializer::GraphQL
 
   class TypeClass
     include ::ArSerializer::Serializable
-    attr_reader :type
-    def initialize(type)
+    attr_reader :type, :only, :except
+    def initialize(type, only = nil, except = nil)
       @type = type
+      @only = only
+      @except = except
     end
 
     def collect_types(types); end
@@ -115,29 +115,33 @@ module ArSerializer::GraphQL
       serializer_field(name) { nil }
     end
 
-    def self.from(type)
+    def self.from(type, only = nil, except = nil)
       type = [type[0...-1].to_sym, nil] if type.is_a?(Symbol) && type.to_s.ends_with?('?')
       type = [type[0...-1], nil] if type.is_a?(String) && type.ends_with?('?')
       case type
       when Class
-        SerializableTypeClass.new type
+        SerializableTypeClass.new type, only, except
       when Symbol, String, Numeric, true, false, nil
         ScalarTypeClass.new type
       when Array
         if type.size == 1
-          ListTypeClass.new(type.first)
+          ListTypeClass.new type.first, only, except
         elsif type.size == 2 && type.last.nil?
           OptionalTypeClass.new type
         else
-          OrTypeClass.new type
+          OrTypeClass.new type, only, except
         end
       when Hash
-        HashTypeClass.new type
+        HashTypeClass.new type, only, except
       end
     end
   end
 
   class ScalarTypeClass < TypeClass
+    def initialize(type)
+      @type = type
+    end
+
     def kind
       'SCALAR'
     end
@@ -208,13 +212,13 @@ module ArSerializer::GraphQL
     def collect_types(types)
       types[:other] = true
       type.values.map do |v|
-        TypeClass.from(v).collect_types(types)
+        TypeClass.from(v, only, except).collect_types(types)
       end
     end
 
     def association_type
       type.values.each do |v|
-        t = TypeClass.from(v).association_type
+        t = TypeClass.from(v, only, except).association_type
         return t if t
       end
       nil
@@ -233,30 +237,49 @@ module ArSerializer::GraphQL
     def ts_type
       fields = type.map do |key, value|
         k = key.to_s == '*' ? '[key: string]' : key
-        "#{k}: #{TypeClass.from(value).ts_type}"
+        "#{k}: #{TypeClass.from(value, only, except).ts_type}"
       end
       "{ #{fields.join('; ')} }"
     end
   end
 
   class SerializableTypeClass < TypeClass
+    def field_only
+      [*only].map(&:to_s)
+    end
+
+    def field_except
+      [*except].map(&:to_s)
+    end
+
     def kind
       'OBJECT'
     end
 
     def name
-      type.name.delete ':'
+      name_segments = [type.name.delete(':')]
+      unless field_only.empty?
+        name_segments << 'Only'
+        name_segments << field_only.map(&:camelize)
+      end
+      unless field_except.empty?
+        name_segments << 'Except'
+        name_segments << field_except.map(&:camelize)
+      end
+      name_segments.join
     end
 
     def fields
-      (type._serializer_field_keys - ['__schema']).map do |name|
+      keys = type._serializer_field_keys - ['__schema'] - field_except
+      keys = field_only & keys unless field_only.empty?
+      keys.map do |name|
         FieldClass.new name, type._serializer_field_info(name)
       end
     end
 
     def collect_types(types)
-      return if types[type]
-      types[type] = true
+      return if types[self]
+      types[self] = true
       fields.each { |field| field.collect_types types }
     end
 
@@ -271,6 +294,22 @@ module ArSerializer::GraphQL
     def ts_type
       "Type#{name}"
     end
+
+    def eql?(t)
+      self.class == t.class && self.compare_elements == t.compare_elements
+    end
+
+    def == t
+      eql? t
+    end
+
+    def compare_elements
+      [type, field_only, field_except]
+    end
+
+    def hash
+      compare_elements.hash
+    end
   end
 
   class OptionalTypeClass < TypeClass
@@ -283,7 +322,7 @@ module ArSerializer::GraphQL
     end
 
     def of_type
-      TypeClass.from type.first
+      TypeClass.from type.first, only, except
     end
 
     def association_type
@@ -317,7 +356,7 @@ module ArSerializer::GraphQL
     end
 
     def of_types
-      type.map { |t| TypeClass.from t }
+      type.map { |t| TypeClass.from t, only, except }
     end
 
     def collect_types(types)
@@ -348,7 +387,7 @@ module ArSerializer::GraphQL
     end
 
     def of_type
-      TypeClass.from type
+      TypeClass.from type, only, except
     end
 
     def collect_types(types)
@@ -364,7 +403,7 @@ module ArSerializer::GraphQL
     end
 
     def sample
-      [of_type.sample]
+      []
     end
 
     def ts_type
