@@ -3,13 +3,14 @@ module ArSerializer::GraphQL
     include ::ArSerializer::Serializable
     attr_reader :name, :type
     def initialize(name, type)
-      @name = name
+      @optional = name.to_s.end_with? '?' # TODO: refactor
+      @name = name.to_s.delete '?'
       @type = TypeClass.from type
     end
     serializer_field :name
     serializer_field :type, except: :fields
     serializer_field(:defaultValue) { nil }
-    serializer_field(:description) { type.description }
+    serializer_field(:description) { "#{'Optional: ' if @optional}#{type.description}" }
   end
 
   class FieldClass
