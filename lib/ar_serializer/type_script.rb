@@ -66,8 +66,6 @@ module ArSerializer::TypeScript
         }
       }
     DEFS
-  rescue => e
-    binding.pry
   end
 
   def self.data_type_definition(type)
