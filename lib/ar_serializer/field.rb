@@ -15,20 +15,22 @@ class ArSerializer::Field
 
   def type
     type = @type.is_a?(Proc) ? @type.call : @type
-    splat = ->(t) {
+    splat = lambda do |t|
       case t
       when String
-        Object.const_get(t)
+        Object.const_get(t) rescue t
       when Array
-        t.map do |v|
-          t.size >= 2 && v.is_a?(String) ? v : splat.call(v)
+        if t.size == 1 || (t.size == 2 && t.compact.size == 1)
+          t.map(&splat)
+        else
+          t.map { |v| v.is_a?(String) ? v : splat.call(v) }
         end
       when Hash
         t.transform_values(&splat)
       else
         t
       end
-    }
+    end
     splat.call type
   end
 
