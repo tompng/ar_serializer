@@ -89,6 +89,34 @@ module ArSerializer::GraphQL
       @type = type
       @only = only
       @except = except
+      validate!
+    end
+
+    class InvalidType < StandardError; end
+
+    def validate!
+      valid_symbols = %i[number int float string boolean any]
+      invalids = []
+      recursive_validate = lambda do |t|
+        case t
+        when Array
+          t.each { |v| recursive_validate.call v }
+        when Hash
+          t.each_value { |v| recursive_validate.call v }
+        when String, Numeric, true, false, nil
+          return
+        when Class
+          invalids << t unless t.ancestors.include? ArSerializer::Serializable
+        when Symbol
+          invalids << t unless valid_symbols.include? t.to_s.gsub(/\?$/, '').to_sym
+        else
+          invalids << t
+        end
+      end
+      recursive_validate.call type
+      return if invalids.empty?
+      message = "Valid types are String, Numeric, Hash, Array, ArSerializer::Serializable, true, false, nil and Symbol#{valid_symbols}"
+      raise InvalidType, "Invalid type: #{invalids.map(&:inspect).join(', ')}. #{message}"
     end
 
     def collect_types(types); end
