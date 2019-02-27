@@ -4,9 +4,9 @@ class User < ActiveRecord::Base
   has_many :posts
   serializer_field :id, :name, :posts
   serializer_field(:foo, type: :string) { :foo1 }
-  serializer_field(:foo, namespace: :aaa, type: :string!) { :foo2 }
+  serializer_field(:foo, namespace: :aaa, type: :string) { :foo2 }
   serializer_field(:bar, namespace: [:aaa, :bbb], type: :string) { :bar }
-  serializer_field(:foobar, namespace: :bbb, type: :string!) { :foobar }
+  serializer_field(:foobar, namespace: :bbb, type: :string) { :foobar }
   serializer_field(:posts_only_title, only: :title, type: ['Post']) { posts }
   serializer_field :posts_only_body, association: :posts, only: :body
   serializer_field(:favorite_post, type: 'FavoritePost') { FavoritePost.new id if id.odd? }

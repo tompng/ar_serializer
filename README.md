@@ -147,7 +147,7 @@ class MySchema
   serializer_field :post, type: Post do |context, id:|
     Post.find id
   end
-  serializer_field :user, type: :string, params_type: { name: :string! } do |context, params|
+  serializer_field :user, type: :string, params_type: { name: :string } do |context, params|
     User.find_by name: params[:name]
   end
   serializer_field :__schema do
