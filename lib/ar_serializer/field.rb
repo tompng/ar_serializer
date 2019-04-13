@@ -103,18 +103,17 @@ class ArSerializer::Field
   def self.type_from_column_type(klass, name)
     type = type_from_attribute_type klass, name.to_s
     return :any if type.nil?
-    klass.column_for_attribute(name).null ? [type, nil] : type
+    klass.column_for_attribute(name).null ? [*type, nil] : type
   end
 
   def self.type_from_attribute_type(klass, name)
     attr_type = klass.attribute_types[name]
-    if attr_type.is_a?(ActiveRecord::Enum::EnumType) && respond_to?(name.pluralize)
-      classes = send(name.pluralize).keys.map(&:class).compact.uniq
-      return if classes.empty?
-      return :boolean if ([TrueClass, FalseClass] - classes).empty?
-      return :string if ([String, Symbol] - classes).empty?
-      return :int if classes == [Integer]
-      return :float if classes.all? { |k| k < Numeric }
+    if attr_type.is_a?(ActiveRecord::Enum::EnumType) && klass.respond_to?(name.pluralize)
+      values = klass.send(name.pluralize).keys.compact
+      values = values.map { |v| v.is_a?(Symbol) ? v.to_s : v }.uniq
+      valid_classes = [TrueClass, FalseClass, String, Integer, Float]
+      return if values.empty? || (values.map(&:class) - valid_classes).present?
+      return values
     end
     {
       boolean: :boolean,
