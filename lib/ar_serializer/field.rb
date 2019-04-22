@@ -170,9 +170,10 @@ class ArSerializer::Field
         end
         klass._custom_preloaders[preloader]
       end
+    else
+      preloaders = []
+      includes ||= name if klass.respond_to?(:reflect_on_association) && klass.reflect_on_association(name)
     end
-    preloaders ||= []
-    includes ||= name if klass.respond_to?(:reflect_on_association) && klass.reflect_on_association(name)
     data_block ||= ->(preloaded, _context, _params) { preloaded[id] } if preloaders.size == 1
     raise ArgumentError, 'data_block needed if multiple preloaders are present' if !preloaders.empty? && data_block.nil?
     new(
