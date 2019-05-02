@@ -38,7 +38,7 @@ module ArSerializer::TypeScript
     query_type_name = "Type#{type.name}Query"
     base_query_type_name = "Type#{type.name}QueryBase"
     <<~TYPE
-      export type #{query_type_name} = keyof (#{base_query_type_name}) | (keyof (#{base_query_type_name}))[] | #{base_query_type_name}
+      export type #{query_type_name} = keyof (#{base_query_type_name}) | Readonly<(keyof (#{base_query_type_name}))[]> | #{base_query_type_name}
       export interface #{base_query_type_name} {
       #{field_definitions.map { |line| "  #{line}" }.join("\n")}
       }
