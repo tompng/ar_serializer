@@ -17,8 +17,6 @@ class ArSerializer::Field
     type = @type.is_a?(Proc) ? @type.call : @type
     splat = lambda do |t|
       case t
-      when String
-        Object.const_get(t) rescue t
       when Array
         if t.size == 1 || (t.size == 2 && t.compact.size == 1)
           t.map(&splat)
