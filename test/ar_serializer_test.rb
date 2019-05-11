@@ -247,6 +247,25 @@ class ArSerializerTest < Minitest::Test
     assert result
   end
 
+  def test_type_validation
+    serializable_class = Class.new { include ArSerializer::Serializable; def self.name; 'A'; end }
+    [
+      [{ x: [:string] }, true],
+      [{ x: [serializable_class] }, true],
+      [{ x: [Object.new] }, false],
+      [{ x: [Class.new] }, false],
+      [{ x: [:strange] }, false]
+    ].each do |type, ok|
+      klass = Class.new { include ArSerializer::Serializable; def self.name; 'B'; end; serializer_field :to_s, type: type }
+      test = -> { ArSerializer::TypeScript.generate_type_definition klass }
+      if ok
+        test.call
+      else
+        assert_raises(ArSerializer::GraphQL::TypeClass::InvalidType, &test)
+      end
+    end
+  end
+
   def test_non_activerecord
     output = ArSerializer.serialize User.all, { favorite_post: [:reason, :post] }, include_id: true
     assert(output.any? { |user| user[:favorite_post] && user[:favorite_post][:post][:id] })

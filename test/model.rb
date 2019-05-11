@@ -7,12 +7,12 @@ class User < ActiveRecord::Base
   serializer_field(:foo, namespace: :aaa, type: :string) { :foo2 }
   serializer_field(:bar, namespace: [:aaa, :bbb], type: :string) { :bar }
   serializer_field(:foobar, namespace: :bbb, type: :string) { :foobar }
-  serializer_field(:posts_only_title, only: :title, type: ['Post']) { posts }
+  serializer_field(:posts_only_title, includes: :posts, only: :title, type: -> { [Post] }) { posts }
   serializer_field :posts_only_body, association: :posts, only: :body
-  serializer_field(:favorite_post, type: 'FavoritePost') { FavoritePost.new id if id.odd? }
+  serializer_field(:favorite_post, type: -> { FavoritePost }) { FavoritePost.new id if id.odd? }
   serializer_field(
     :posts_with_total,
-    type: { total: :int, list: ['Post'] },
+    type: -> { { total: :int, list: [Post] } },
     preload: lambda do |models, _context, params|
       {
         list: ArSerializer::Field.preload_association(User, models, :posts, params),
@@ -35,7 +35,7 @@ class Post < ActiveRecord::Base
   has_many :comments
   serializer_field :id, :title, :body, :user, :comments
   serializer_field :user_only_name, association: :user, only: :name
-  serializer_field(:user_except_posts, except: :posts, type: User) { user }
+  serializer_field(:user_except_posts, includes: :user, except: :posts, type: User) { user }
   serializer_field :created_at, namespace: :aaa
   serializer_field :cmnts, association: :comments
   serializer_field(:modifiedAt, order_column: :updated_at, type: :string) { updated_at }
@@ -85,7 +85,7 @@ class Comment < ActiveRecord::Base
     (preloaded[id] || 0) * 5
   end
 
-  serializer_field :current_user_stars, type: ['Star'], preload: lambda { |comments, context|
+  serializer_field :current_user_stars, type: -> { [Star] }, preload: lambda { |comments, context|
     stars = Star.where(comment_id: comments.map(&:id), user_id: context[:current_user].id)
     Hash.new { [] }.merge stars.group_by(&:comment_id)
   }
