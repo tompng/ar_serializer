@@ -6,7 +6,7 @@
 ## Install
 
 ```ruby
-gem 'ar_serializer', github: 'tompng/ar_serializer'
+gem 'ar_serializer'
 ```
 
 ## Field定義
