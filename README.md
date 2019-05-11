@@ -81,7 +81,6 @@ class Foo < ActiveRecord::Base
 end
 
 # order and limits
-# add `gem 'top_n_loader', github: 'tompng/top_n_loader'` to your Gemfile
 class Post < ActiveRecord::Base
   has_many :comments
   serializer_field :comments
