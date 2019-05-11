@@ -136,6 +136,7 @@ class User < ActiveRecord::Base
   serializer_field :foobar, type: ['foo', 'bar', { foobar: [:string, nil] }] do
     ['foo', 'bar', { foobar: nil }, { foobar: 'foobar' }].sample
   end
+  serializer_field :published_posts, type: -> { [Post] }
 end
 ArSerializer::TypeScript.generate_type_definition User
 # => export type TypeUser {...}; export type TypePost {...}; ...
