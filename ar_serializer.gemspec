@@ -31,6 +31,7 @@ Gem::Specification.new do |spec|
   spec.require_paths = ['lib']
 
   spec.add_dependency 'activerecord'
+  spec.add_dependency 'top_n_loader'
   %w[rake pry sqlite3 minitest simplecov].each do |gem_name|
     spec.add_development_dependency gem_name
   end

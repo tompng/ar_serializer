@@ -6,7 +6,7 @@
 ## Install
 
 ```ruby
-gem 'ar_serializer', github: 'tompng/ar_serializer'
+gem 'ar_serializer'
 ```
 
 ## Field定義
@@ -81,7 +81,6 @@ class Foo < ActiveRecord::Base
 end
 
 # order and limits
-# add `gem 'top_n_loader', github: 'tompng/top_n_loader'` to your Gemfile
 class Post < ActiveRecord::Base
   has_many :comments
   serializer_field :comments
@@ -137,6 +136,7 @@ class User < ActiveRecord::Base
   serializer_field :foobar, type: ['foo', 'bar', { foobar: [:string, nil] }] do
     ['foo', 'bar', { foobar: nil }, { foobar: 'foobar' }].sample
   end
+  serializer_field :published_posts, type: -> { [Post] }
 end
 ArSerializer::TypeScript.generate_type_definition User
 # => export type TypeUser {...}; export type TypePost {...}; ...
