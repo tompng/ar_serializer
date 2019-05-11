@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    ar_serializer (0.1.0)
+    ar_serializer (1.0.0)
       activerecord
       top_n_loader
 
@@ -56,4 +56,4 @@ DEPENDENCIES
   sqlite3
 
 BUNDLED WITH
-   1.16.1
+   1.17.2
