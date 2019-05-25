@@ -120,6 +120,16 @@ class ArSerializerTest < Minitest::Test
     assert_equal expected, ArSerializer.serialize(post, query)
   end
 
+  def test_dup_alias
+    users = User.all
+    expected = users.map { |u| { id1: u.id, id2: u.id, name1: u.name, name2: u.name } }
+    query = [
+      { id: { as: :id1 } }, { id: { as: :id2 } },
+      { name: { as: :name1 } }, { name: { as: :name2 } }
+    ]
+    assert_equal expected, ArSerializer.serialize(users, query)
+  end
+
   def test_query_count
     user = Star.first.comment.post.user
     query = {
