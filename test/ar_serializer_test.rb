@@ -130,6 +130,19 @@ class ArSerializerTest < Minitest::Test
     assert_equal expected, ArSerializer.serialize(users, query)
   end
 
+  def test_as_field_alias
+    users = User.all
+    query1 = [
+      { id: { as: :id1 } }, { id: { as: :id2 } },
+      { name: { as: :name1 } }, { name: { as: :name2 } }
+    ]
+    query2 = [
+      { id1: { field: :id } }, { id2: { field: :id } },
+      { name1: { field: :name } }, { name2: { field: :name } }
+    ]
+    assert_equal ArSerializer.serialize(users, query1), ArSerializer.serialize(users, query2)
+  end
+
   def test_query_count
     user = Star.first.comment.post.user
     query = {
