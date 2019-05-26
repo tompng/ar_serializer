@@ -38,7 +38,15 @@ module ArSerializer::GraphQL
       type.collect_types types
     end
 
+    def args_required?
+      return false if field.arguments == :any
+      field.arguments.any? do |key, type|
+        !key.match?(/\?$/) && !(type.is_a?(Array) && type.include?(nil))
+      end
+    end
+
     def args_ts_type
+      return 'any' if field.arguments == :any
       arg_types = field.arguments.map do |key, type|
         "#{key}: #{TypeClass.from(type).ts_type}"
       end
