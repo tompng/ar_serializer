@@ -194,7 +194,7 @@ class ArSerializer::GraphQL::Parser
     args = parse_args
     consume_blank
     fields = parse_fields
-    [name, { as: alias_name, params: args, attributes: fields }.compact]
+    [(alias_name || name), { field: name, params: args, attributes: fields }.compact]
   end
 
   def parse_fields
