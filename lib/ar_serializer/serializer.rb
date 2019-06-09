@@ -66,14 +66,16 @@ module ArSerializer::Serializer
         attributes = all_keys.map { |k| [k, {}] } + attributes
         attributes.reject! { |k, _| k == :* }
       end
-      attributes.each do |name, _|
-        field = klass._serializer_field_info name
-        raise ArSerializer::InvalidQuery, "No serializer field `#{name}`#{" namespaces: #{current_namespaces}" if current_namespaces} for #{klass}" unless field
+      attributes.each do |name, sub_args|
+        field_name = sub_args[:field_name] || name
+        field = klass._serializer_field_info field_name
+        raise ArSerializer::InvalidQuery, "No serializer field `#{field_name}`#{" namespaces: #{current_namespaces}" if current_namespaces} for #{klass}" unless field
         ActiveRecord::Associations::Preloader.new.preload models, field.includes if field.includes.present?
       end
 
       preloader_params = attributes.flat_map do |name, sub_args|
-        klass._serializer_field_info(name).preloaders.map do |p|
+        field_name = sub_args[:field_name] || name
+        klass._serializer_field_info(field_name).preloaders.map do |p|
           [p, sub_args[:params]]
         end
       end
@@ -102,7 +104,8 @@ module ArSerializer::Serializer
         params = sub_arg[:params]
         sub_calls = []
         column_name = sub_arg[:column_name] || name
-        info = klass._serializer_field_info name
+        field_name = sub_arg[:field_name] || name
+        info = klass._serializer_field_info field_name
         preloadeds = info.preloaders.map { |p| preloader_values[[p, params]] } || []
         data_block = info.data_block
         value_outputs.each do |value, output|
@@ -154,15 +157,18 @@ module ArSerializer::Serializer
     attributes = []
     params = nil
     column_name = nil
+    field_name = nil
     (args.is_a?(Array) ? args : [args]).each do |arg|
       if arg.is_a?(Symbol) || arg.is_a?(String)
         attributes << [arg.to_sym, {}]
       elsif arg.is_a? Hash
         arg.each do |key, value|
           sym_key = key.to_sym
-          if !only_attributes && sym_key == :as
+          if !only_attributes && sym_key == :field
+            field_name = value
+          elsif !only_attributes && sym_key == :as
             column_name = value
-          elsif !only_attributes && sym_key == :attributes
+          elsif !only_attributes && %i[attributes query].include?(sym_key)
             attributes.concat parse_args(value, only_attributes: true)
           elsif !only_attributes && sym_key == :params
             params = deep_with_indifferent_access value
@@ -175,6 +181,6 @@ module ArSerializer::Serializer
       end
     end
     return attributes if only_attributes
-    { attributes: attributes, column_name: column_name, params: params || {} }
+    { attributes: attributes, column_name: column_name, field_name: field_name, params: params || {} }
   end
 end
