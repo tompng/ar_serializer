@@ -4,7 +4,7 @@ module ArSerializer::TypeScript
   def self.generate_type_definition(*classes)
     types = related_serializer_types classes.flatten
     [
-      'type NonAliasQuery = true | false | string | string[] | ({ field?: undefined } & { [key: string]: any })',
+      'type NonAliasQuery = true | string | string[] | ({ field?: undefined } & { [key: string]: any })',
       types.map { |t| data_type_definition t },
       types.map { |t| query_type_definition t }
     ].join "\n"
