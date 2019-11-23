@@ -186,6 +186,29 @@ class ArSerializerTest < Minitest::Test
     end
   end
 
+  def test_accept_primary_key_ordering
+    post_without_id_class = Class.new ActiveRecord::Base do
+      self.table_name = :posts
+      serializer_field :title
+    end
+    user_class = Class.new ActiveRecord::Base do
+      self.table_name = :users
+      has_many :posts, anonymous_class: post_without_id_class, foreign_key: :user_id
+      serializer_field :name, :posts
+    end
+    [
+      [:name, posts: :title],
+      [:name, posts: [:title, params: { order: :desc }]],
+      [:name, posts: [:title, params: { order: { id: :asc } }]]
+    ].each do |query|
+      assert ArSerializer.serialize(user_class.all, query)
+    end
+    assert_raises(ArSerializer::InvalidQuery) do
+      query = [:name, posts: [:title, params: { order: { body: :asc } }]]
+      ArSerializer.serialize user_class.all, query
+    end
+  end
+
   def test_subclasses
     klass = Class.new User do
       self.table_name = :users
