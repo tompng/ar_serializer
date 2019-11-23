@@ -194,7 +194,7 @@ class ArSerializer::Field
     end
     info = klass._serializer_field_info(key)
     key = info&.order_column || key.to_s.underscore
-    raise ArSerializer::InvalidQuery, "unpermitted order key: #{key}" unless klass.has_attribute?(key) && info
+    raise ArSerializer::InvalidQuery, "unpermitted order key: #{key}" unless klass.primary_key == key.to_s || (klass.has_attribute?(key) && info)
     raise ArSerializer::InvalidQuery, "invalid order mode: #{mode.inspect}" unless [:asc, :desc, 'asc', 'desc'].include? mode
     [key.to_sym, mode.to_sym]
   end
