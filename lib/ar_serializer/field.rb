@@ -82,19 +82,19 @@ class ArSerializer::Field
     preloader = lambda do |models|
       klass.joins(association_name).where(id: models.map(&:id)).group(:id).count
     end
-    data_block = lambda do |preloaded, _context, _params|
+    data_block = lambda do |preloaded, _context, **_params|
       preloaded[id] || 0
     end
     new preloaders: [preloader], data_block: data_block, type: :int
   end
 
   def self.top_n_loader_available?
-    return @top_n_loader_available unless @top_n_loader_available.nil?
+    return @top_n_loader_available if instance_variable_defined? '@top_n_loader_available'
     @top_n_loader_available = begin
       require 'top_n_loader'
       true
     rescue LoadError
-      nil
+      false
     end
   end
 
@@ -172,11 +172,11 @@ class ArSerializer::Field
       preloaders = []
       includes ||= name if klass.respond_to?(:reflect_on_association) && klass.reflect_on_association(name)
     end
-    data_block ||= ->(preloaded, _context, _params) { preloaded[id] } if preloaders.size == 1
+    data_block ||= ->(preloaded, _context, **_params) { preloaded[id] } if preloaders.size == 1
     raise ArgumentError, 'data_block needed if multiple preloaders are present' if !preloaders.empty? && data_block.nil?
     new(
       includes: includes, preloaders: preloaders, only: only, except: except, order_column: order_column, type: type, params_type: params_type,
-      data_block: data_block || ->(_context, _params) { send name }
+      data_block: data_block || ->(_context, **_params) { send name }
     )
   end
 
@@ -206,11 +206,11 @@ class ArSerializer::Field
       end
       params_type = { limit?: :int, order?: [{ :* => %w[asc desc] }, 'asc', 'desc'] }
     else
-      preloader = lambda do |models, _context, _params|
+      preloader = lambda do |models, _context, **_params|
         preload_association klass, models, name
       end
     end
-    data_block = lambda do |preloaded, _context, _params|
+    data_block = lambda do |preloaded, _context, **_params|
       preloaded ? preloaded[id] || [] : send(name)
     end
     new preloaders: [preloader], data_block: data_block, only: only, except: except, type: type, params_type: params_type

@@ -13,9 +13,9 @@ class User < ActiveRecord::Base
   serializer_field(
     :posts_with_total,
     type: -> { { total: :int, list: [Post] } },
-    preload: lambda do |models, _context, params|
+    preload: lambda do |models, _context, **params|
       {
-        list: ArSerializer::Field.preload_association(User, models, :posts, params),
+        list: ArSerializer::Field.preload_association(User, models, :posts, **params),
         total: User.where(id: models.map(&:id)).joins(:posts).group(:id).count
       }
     end
