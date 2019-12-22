@@ -1,4 +1,5 @@
 require 'ar_serializer/error'
+require 'top_n_loader'
 
 class ArSerializer::Field
   attr_reader :includes, :preloaders, :data_block, :only, :except, :order_column
@@ -86,16 +87,6 @@ class ArSerializer::Field
       preloaded[id] || 0
     end
     new preloaders: [preloader], data_block: data_block, type: :int
-  end
-
-  def self.top_n_loader_available?
-    return @top_n_loader_available if instance_variable_defined? '@top_n_loader_available'
-    @top_n_loader_available = begin
-      require 'top_n_loader'
-      true
-    rescue LoadError
-      false
-    end
   end
 
   def self.type_from_column_type(klass, name)
@@ -219,16 +210,14 @@ class ArSerializer::Field
   def self.preload_association(klass, models, name, limit: nil, order: nil)
     limit = limit&.to_i
     order_key, order_mode = parse_order klass.reflect_on_association(name).klass, order
-    if limit && top_n_loader_available?
-      return TopNLoader.load_associations klass, models.map(&:id), name, limit: limit, order: { order_key => order_mode }
-    end
+    return TopNLoader.load_associations klass, models.map(&:id), name, limit: limit, order: { order_key => order_mode } if limit
     ActiveRecord::Associations::Preloader.new.preload models, name
-    return if limit.nil? && order.nil?
+    return if order.nil?
     models.map do |model|
       records_nonnils, records_nils = model.send(name).partition(&order_key)
       records = records_nils.sort_by(&:id) + records_nonnils.sort_by { |r| [r[order_key], r.id] }
       records.reverse! if order_mode == :desc
-      [model.id, limit ? records.take(limit) : records]
+      [model.id, records]
     end.to_h
   end
 end
