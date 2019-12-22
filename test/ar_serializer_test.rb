@@ -317,6 +317,19 @@ class ArSerializerTest < Minitest::Test
     assert(output.any? { |user| user[:favorite_post] && user[:favorite_post][:post][:id] })
   end
 
+  def test_defaults
+    klass = Class.new do
+      include ArSerializer::Serializable
+      serializer_field(:id) { 1 }
+      serializer_field(:name) { 'name' }
+      serializer_defaults(namespace: :foo) { { bar: 2, baz: 3 } }
+    end
+    obj = klass.new
+    assert_equal ArSerializer.serialize(obj, :id), { id: 1 }
+    assert_equal ArSerializer.serialize(obj, :id, use: :foo), { id: 1, bar: 2, baz: 3 }
+    assert_equal ArSerializer.serialize(obj, :*, use: :foo), { id: 1, name: 'name', bar: 2, baz: 3 }
+  end
+
   def test_schema
     schema = Class.new do
       def self.name
