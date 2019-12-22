@@ -120,10 +120,6 @@ module ArSerializer::Serializer
             sub_output, record_elements = child.ar_serializer_build_sub_calls
             record_elements.each { |o| sub_calls << o }
             output[column_name] = sub_output
-          elsif child.is_a? ArSerializer::CompositeValue
-            sub_output, record_elements = child.build
-            record_elements.each { |o| sub_calls << o }
-            output[column_name] = sub_output
           elsif child.is_a? ArSerializer::Serializable
             data = {}
             sub_calls << [child, data]
