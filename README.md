@@ -85,11 +85,11 @@ class Post < ActiveRecord::Base
   has_many :comments
   serializer_field :comments
 end
-ArSerializer.serialize Post.all, comments: [:id, params: { order: { id: :desc }, limit: 2 }]
+ArSerializer.serialize Post.all, { comments: [:id, params: { order: { id: :desc }, limit: 2 }] }
 
 # context and params
 class Post < ActiveRecord::Base
-  serializer_field :created_at do |context, params|
+  serializer_field :created_at do |context, **params|
     created_at.in_time_zone(context[:tz]).strftime params[:format]
   end
 end
@@ -123,10 +123,10 @@ class User < ActiveRecord::Base
   serializer_field :o_posts, association: :posts, only: :title
   serializer_field :e_posts, association: :posts, except: :comments
 end
-ArSerializer.serialize user, o_posts: :title, e_posts: :body
-ArSerializer.serialize user, o_posts: :*, e_posts: :*
-ArSerializer.serialize user, o_posts: :body #=> Error
-ArSerializer.serialize user, e_posts: :comments #=> Error
+ArSerializer.serialize user, { o_posts: :title, e_posts: :body }
+ArSerializer.serialize user, { o_posts: :*, e_posts: :* }
+ArSerializer.serialize user, { o_posts: :body } #=> Error
+ArSerializer.serialize user, { e_posts: :comments } #=> Error
 
 # types
 class User < ActiveRecord::Base
