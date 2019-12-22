@@ -60,11 +60,10 @@ module ArSerializer::Serializer
       models = value_outputs.map(&:first)
       value_outputs.each { |value, output| output[:id] = value.id } if include_id && klass.method_defined?(:id)
       if attributes.any? { |k, _| k == :* }
-        all_keys = klass._serializer_field_keys.map(&:to_sym)
+        all_keys = klass._serializer_field_keys.map(&:to_sym) - [:defaults]
         all_keys &= only.map(&:to_sym) if only
         all_keys -= except.map(&:to_sym) if except
-        attributes = all_keys.map { |k| [k, {}] } + attributes
-        attributes.reject! { |k, _| k == :* }
+        attributes = all_keys.map { |k| [k, {}] } + attributes.reject { |k, _| k == :* }
       end
       attributes.each do |name, sub_args|
         field_name = sub_args[:field_name] || name
