@@ -74,7 +74,7 @@ class ArSerializerTest < Minitest::Test
         { stars_count_x5: c.stars.count * 5 }
       end
     }
-    assert_equal expected, ArSerializer.serialize(post, comments: :stars_count_x5)
+    assert_equal expected, ArSerializer.serialize(post, { comments: :stars_count_x5 })
   end
 
   def test_count_preloader
@@ -84,7 +84,7 @@ class ArSerializerTest < Minitest::Test
         { stars_count: c.stars.count }
       end
     }
-    assert_equal expected, ArSerializer.serialize(post, comments: :stars_count)
+    assert_equal expected, ArSerializer.serialize(post, { comments: :stars_count })
   end
 
   def test_association_option
@@ -248,9 +248,9 @@ class ArSerializerTest < Minitest::Test
   def test_aster_only_except
     post = Post.first
     ['*', :*].each do |aster|
-      data = ArSerializer.serialize post, user: aster
-      data1 = ArSerializer.serialize post, user_except_posts: aster
-      data2 = ArSerializer.serialize post, user_only_name: aster
+      data = ArSerializer.serialize post, { user: aster }
+      data1 = ArSerializer.serialize post, { user_except_posts: aster }
+      data2 = ArSerializer.serialize post, { user_only_name: aster }
       assert_equal post.user.name, data[:user][:name]
       assert_equal post.user.name, data1[:user_except_posts][:name]
       assert_equal post.user.name, data2[:user_only_name][:name]
@@ -267,7 +267,7 @@ class ArSerializerTest < Minitest::Test
       get_target_ids = lambda do
         ArSerializer.serialize(
           user.reload,
-          posts: [:id, field, params: { order: { field => :asc } }]
+          { posts: [:id, field, params: { order: { field => :asc } }] }
         )[:posts].map { |post| post[:id] }
       end
       user.posts.each do |post|
@@ -278,13 +278,13 @@ class ArSerializerTest < Minitest::Test
   end
 
   def test_camelized_association
-    posts = ArSerializer.serialize Post.all, Comments: :id, comments: :id
+    posts = ArSerializer.serialize Post.all, { Comments: :id, comments: :id }
     assert(posts.all? { |post| post[:comments] == post[:Comments] })
   end
 
   def test_non_array_composite_value
-    output = ArSerializer.serialize User.all, posts_with_total: [:id, params: { limit: 2 }]
-    output_ref = ArSerializer.serialize User.all, posts: :id
+    output = ArSerializer.serialize User.all, { posts_with_total: [:id, params: { limit: 2 }] }
+    output_ref = ArSerializer.serialize User.all, { posts: :id }
     result = output.zip(output_ref).all? do |o, oref|
       posts_with_total = o[:posts_with_total]
       posts = oref[:posts]
@@ -315,6 +315,19 @@ class ArSerializerTest < Minitest::Test
   def test_non_activerecord
     output = ArSerializer.serialize User.all, { favorite_post: [:reason, :post] }, include_id: true
     assert(output.any? { |user| user[:favorite_post] && user[:favorite_post][:post][:id] })
+  end
+
+  def test_defaults
+    klass = Class.new do
+      include ArSerializer::Serializable
+      serializer_field(:id) { 1 }
+      serializer_field(:name) { 'name' }
+      serializer_defaults(namespace: :foo) { { bar: 2, baz: 3 } }
+    end
+    obj = klass.new
+    assert_equal ArSerializer.serialize(obj, :id), { id: 1 }
+    assert_equal ArSerializer.serialize(obj, :id, use: :foo), { id: 1, bar: 2, baz: 3 }
+    assert_equal ArSerializer.serialize(obj, :*, use: :foo), { id: 1, name: 'name', bar: 2, baz: 3 }
   end
 
   def test_schema

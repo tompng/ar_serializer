@@ -37,9 +37,9 @@ module ArSerializer::Serializer
     Thread.current[:ar_serializer_current_namespaces] = namespaces_was
   end
 
-  def self.serialize(model, args, context: nil, include_id: false, use: nil)
+  def self.serialize(model, query, context: nil, include_id: false, use: nil)
     with_namespaces use do
-      attributes = parse_args(args)[:attributes]
+      attributes = parse_args(query)[:attributes]
       if model.is_a?(ArSerializer::Serializable)
         output = {}
         _serialize [[model, output]], attributes, context, include_id
@@ -60,11 +60,10 @@ module ArSerializer::Serializer
       models = value_outputs.map(&:first)
       value_outputs.each { |value, output| output[:id] = value.id } if include_id && klass.method_defined?(:id)
       if attributes.any? { |k, _| k == :* }
-        all_keys = klass._serializer_field_keys.map(&:to_sym)
+        all_keys = klass._serializer_field_keys.map(&:to_sym) - [:defaults]
         all_keys &= only.map(&:to_sym) if only
         all_keys -= except.map(&:to_sym) if except
-        attributes = all_keys.map { |k| [k, {}] } + attributes
-        attributes.reject! { |k, _| k == :* }
+        attributes = all_keys.map { |k| [k, {}] } + attributes.reject { |k, _| k == :* }
       end
       attributes.each do |name, sub_args|
         field_name = sub_args[:field_name] || name
@@ -86,9 +85,9 @@ module ArSerializer::Serializer
       preloader_values = preloader_params.compact.uniq.map do |key|
         preloader, params = key
         if preloader.arity < 0
-          [key, preloader.call(models, context, params || {})]
+          [key, preloader.call(models, context, **(params || {}))]
         else
-          [key, preloader.call(*[models, context, params || {}].take(preloader.arity))]
+          [key, preloader.call(*[models, context].take(preloader.arity), **(params || {}))]
         end
       end.to_h
 
@@ -109,7 +108,8 @@ module ArSerializer::Serializer
         preloadeds = info.preloaders.map { |p| preloader_values[[p, params]] } || []
         data_block = info.data_block
         value_outputs.each do |value, output|
-          child = value.instance_exec(*preloadeds, context, params || {}, &data_block)
+          args = [*preloadeds, context] # avoid segfault in 2.7.0-preview3
+          child = value.instance_exec(*args, **(params || {}), &data_block)
           if child.is_a?(Array) && child.all? { |el| el.is_a? ArSerializer::Serializable }
             output[column_name] = child.map do |record|
               data = {}
@@ -118,10 +118,6 @@ module ArSerializer::Serializer
             end
           elsif child.respond_to? :ar_serializer_build_sub_calls
             sub_output, record_elements = child.ar_serializer_build_sub_calls
-            record_elements.each { |o| sub_calls << o }
-            output[column_name] = sub_output
-          elsif child.is_a? ArSerializer::CompositeValue
-            sub_output, record_elements = child.build
             record_elements.each { |o| sub_calls << o }
             output[column_name] = sub_output
           elsif child.is_a? ArSerializer::Serializable

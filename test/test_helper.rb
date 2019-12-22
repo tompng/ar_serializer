@@ -11,7 +11,7 @@ end
 
 module SQLCounts
   module M
-    def exec_query *args
+    def exec_query(*args, **option)
       SQLCounts.increment_count
       super
     end

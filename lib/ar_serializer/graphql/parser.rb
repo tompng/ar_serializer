@@ -9,8 +9,8 @@ class ArSerializer::GraphQL::Parser
     @chars = query.chars
   end
 
-  def self.parse(*args)
-    new(*args).parse
+  def self.parse(query, **option)
+    new(query, **option).parse
   end
 
   def parse

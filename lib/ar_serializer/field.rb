@@ -1,4 +1,5 @@
 require 'ar_serializer/error'
+require 'top_n_loader'
 
 class ArSerializer::Field
   attr_reader :includes, :preloaders, :data_block, :only, :except, :order_column
@@ -82,20 +83,10 @@ class ArSerializer::Field
     preloader = lambda do |models|
       klass.joins(association_name).where(id: models.map(&:id)).group(:id).count
     end
-    data_block = lambda do |preloaded, _context, _params|
+    data_block = lambda do |preloaded, _context, **_params|
       preloaded[id] || 0
     end
     new preloaders: [preloader], data_block: data_block, type: :int
-  end
-
-  def self.top_n_loader_available?
-    return @top_n_loader_available unless @top_n_loader_available.nil?
-    @top_n_loader_available = begin
-      require 'top_n_loader'
-      true
-    rescue LoadError
-      nil
-    end
   end
 
   def self.type_from_column_type(klass, name)
@@ -172,11 +163,11 @@ class ArSerializer::Field
       preloaders = []
       includes ||= name if klass.respond_to?(:reflect_on_association) && klass.reflect_on_association(name)
     end
-    data_block ||= ->(preloaded, _context, _params) { preloaded[id] } if preloaders.size == 1
+    data_block ||= ->(preloaded, _context, **_params) { preloaded[id] } if preloaders.size == 1
     raise ArgumentError, 'data_block needed if multiple preloaders are present' if !preloaders.empty? && data_block.nil?
     new(
       includes: includes, preloaders: preloaders, only: only, except: except, order_column: order_column, type: type, params_type: params_type,
-      data_block: data_block || ->(_context, _params) { send name }
+      data_block: data_block || ->(_context, **_params) { send name }
     )
   end
 
@@ -206,11 +197,11 @@ class ArSerializer::Field
       end
       params_type = { limit?: :int, order?: [{ :* => %w[asc desc] }, 'asc', 'desc'] }
     else
-      preloader = lambda do |models, _context, _params|
+      preloader = lambda do |models, _context, **_params|
         preload_association klass, models, name
       end
     end
-    data_block = lambda do |preloaded, _context, _params|
+    data_block = lambda do |preloaded, _context, **_params|
       preloaded ? preloaded[id] || [] : send(name)
     end
     new preloaders: [preloader], data_block: data_block, only: only, except: except, type: type, params_type: params_type
@@ -219,16 +210,14 @@ class ArSerializer::Field
   def self.preload_association(klass, models, name, limit: nil, order: nil)
     limit = limit&.to_i
     order_key, order_mode = parse_order klass.reflect_on_association(name).klass, order
-    if limit && top_n_loader_available?
-      return TopNLoader.load_associations klass, models.map(&:id), name, limit: limit, order: { order_key => order_mode }
-    end
+    return TopNLoader.load_associations klass, models.map(&:id), name, limit: limit, order: { order_key => order_mode } if limit
     ActiveRecord::Associations::Preloader.new.preload models, name
-    return if limit.nil? && order.nil?
+    return if order.nil?
     models.map do |model|
       records_nonnils, records_nils = model.send(name).partition(&order_key)
       records = records_nils.sort_by(&:id) + records_nonnils.sort_by { |r| [r[order_key], r.id] }
       records.reverse! if order_mode == :desc
-      [model.id, limit ? records.take(limit) : records]
+      [model.id, records]
     end.to_h
   end
 end

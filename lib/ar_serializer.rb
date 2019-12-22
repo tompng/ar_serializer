@@ -4,8 +4,8 @@ require 'ar_serializer/field'
 require 'active_record'
 
 module ArSerializer
-  def self.serialize(*args)
-    Serializer.serialize(*args)
+  def self.serialize(model, query, **option)
+    Serializer.serialize(model, query, **option)
   end
 end
 
@@ -50,7 +50,7 @@ module ArSerializer::Serializable
       namespaces = namespace.is_a?(Array) ? namespace : [namespace]
       namespaces.each do |ns|
         names.each do |name|
-          field = ArSerializer::Field.create(self, association || name, option, &data_block)
+          field = ArSerializer::Field.create(self, association || name, **option, &data_block)
           _serializer_namespace(ns)[name.to_s] = field
         end
       end
@@ -64,8 +64,8 @@ module ArSerializer::Serializable
       _custom_preloaders[name] = block
     end
 
-    def serializer_defaults(*args, &block)
-      serializer_field :defaults, *args, &block
+    def serializer_defaults(**args, &block)
+      serializer_field :defaults, **args, &block
     end
   end
 end
