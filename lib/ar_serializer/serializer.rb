@@ -84,10 +84,15 @@ module ArSerializer::Serializer
       end
       preloader_values = preloader_params.compact.uniq.map do |key|
         preloader, params = key
-        if preloader.arity < 0
-          [key, preloader.call(models, context, **(params || {}))]
+        has_keyword = preloader.parameters.any? { |type, _name| %i[key keyreq keyrest].include? type }
+        arity = preloader.arity.abs
+        arguments = [models]
+        if has_keyword
+          arguments << context unless arity == 2
+          [key, preloader.call(*arguments, **(params || {}))]
         else
-          [key, preloader.call(*[models, context].take(preloader.arity), **(params || {}))]
+          arguments << context unless arity == 1
+          [key, preloader.call(*arguments)]
         end
       end.to_h
 

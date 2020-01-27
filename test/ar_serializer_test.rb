@@ -77,6 +77,51 @@ class ArSerializerTest < Minitest::Test
     assert_equal expected, ArSerializer.serialize(post, { comments: :stars_count_x5 })
   end
 
+  def test_preloader_arity
+    klass = Class.new do
+      def id; 'a'; end
+      include ArSerializer::Serializable
+      serializer_field :a1, preload: ->(as) { Hash.new [as[0].id] }
+      serializer_field :a2, preload: ->(as, ctx) { Hash.new [as[0].id, ctx] }
+      serializer_field :key1, preload: ->(as, x: 1){ Hash.new [as[0].id, x] }
+      serializer_field :key2, preload: ->(as, ctx, x: 1) { Hash.new [as[0].id, ctx, x] }
+      serializer_field :keyreq1, preload: ->(as, x:){ Hash.new [as[0].id, x] }
+      serializer_field :keyreq2, preload: ->(as, ctx, x:) { Hash.new [as[0].id, ctx, x] }
+      serializer_field :keyrest1, preload: ->(as, **params) { Hash.new [as[0].id, params] }
+      serializer_field :keyrest2, preload: ->(as, ctx, **params) { Hash.new [as[0].id, ctx, params] }
+    end
+    params = { params: { x: 1 } }
+    result = ArSerializer.serialize(
+      klass.new,
+      [
+        :a1,
+        :a2,
+        :key1,
+        :key2,
+        keyreq1: params,
+        keyreq2: params,
+        keyrest1: params,
+        keyrest2: params
+      ],
+      context: :ctx
+    )
+    expected1 = ['a']
+    expected2 = ['a', :ctx]
+    expectedkey1 = ['a', 1]
+    expectedkey2 = ['a', :ctx, 1]
+    expected = {
+      a1: expected1,
+      a2: expected2,
+      key1: expectedkey1,
+      key2: expectedkey2,
+      keyreq1: expectedkey1,
+      keyreq2: expectedkey2,
+      keyrest1: ['a', { x: 1 }],
+      keyrest2: ['a', :ctx, { x: 1 }]
+    }
+    assert_equal expected, result
+  end
+
   def test_count_preloader
     post = Star.first.comment.post
     expected = {
