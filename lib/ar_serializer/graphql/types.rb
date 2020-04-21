@@ -103,7 +103,7 @@ module ArSerializer::GraphQL
     class InvalidType < StandardError; end
 
     def validate!
-      valid_symbols = %i[number int float string boolean any]
+      valid_symbols = %i[number int float string boolean any unknown]
       invalids = []
       recursive_validate = lambda do |t|
         case t
@@ -195,6 +195,8 @@ module ArSerializer::GraphQL
         :boolean
       when :other
         :other
+      when :unknown
+        :unknown
       else
         :any
       end
@@ -216,7 +218,7 @@ module ArSerializer::GraphQL
         ''
       when 'boolean'
         true
-      when 'any'
+      when 'any', 'unknown'
         nil
       else
         type
@@ -227,7 +229,7 @@ module ArSerializer::GraphQL
       case type
       when :int, :float
         'number'
-      when :string, :number, :boolean
+      when :string, :number, :boolean, :unknown
         type.to_s
       when Symbol
         'any'
