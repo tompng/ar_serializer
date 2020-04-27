@@ -111,7 +111,7 @@ class ArSerializer::Field
       decimal: :float,
       string: :string,
       text: :string,
-      json: :string,
+      json: :unknown,
       binary: :string,
       time: :string,
       date: :string,
