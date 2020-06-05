@@ -57,14 +57,18 @@ module ArSerializer::Serializable
       _custom_preloaders[name] = block
     end
 
+    def serializer_permission(**args, &data_block)
+      serializer_field(:permission, **args, &data_block)
+    end
+
     def serializer_defaults(**args, &block)
-      serializer_field :defaults, **args, &block
+      serializer_field(:defaults, **args, &block)
     end
   end
 end
 
 ActiveRecord::Base.include ArSerializer::Serializable
-ActiveRecord::Relation.include ArSerializer::ArrayLikeCompositeValue
+ActiveRecord::Relation.include ArSerializer::ArrayLikeSerializable
 
 require 'ar_serializer/graphql'
 require 'ar_serializer/type_script'

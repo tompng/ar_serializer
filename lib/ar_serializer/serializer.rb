@@ -1,27 +1,18 @@
 require 'ar_serializer/error'
 
-class ArSerializer::CompositeValue
-  def initialize(pairs:, output:)
-    @pairs = pairs
-    @output = output
+class ArSerializer::CustomSerializable
+  attr_reader :ar_custom_serializable_models
+  def initialize(models, &block)
+    @ar_custom_serializable_models = models
+    @block = block
   end
 
-  def ar_serializer_build_sub_calls
-    [@output, @pairs]
+  def ar_custom_serializable_data(result)
+    @block.call result
   end
 end
 
-module ArSerializer::ArrayLikeCompositeValue
-  def ar_serializer_build_sub_calls
-    output = []
-    record_elements = []
-    each do |record|
-      data = {}
-      output << data
-      record_elements << [record, data]
-    end
-    [output, record_elements]
-  end
+module ArSerializer::ArrayLikeSerializable
 end
 
 module ArSerializer::Serializer
@@ -41,23 +32,24 @@ module ArSerializer::Serializer
     with_namespaces use do
       attributes = parse_args(query)[:attributes]
       if model.is_a?(ArSerializer::Serializable)
-        output = {}
-        _serialize [[model, output]], attributes, context
-        output
+        result = _serialize [model], attributes, context
+        result[model]
       else
-        sets = model.to_a.map do |record|
-          [record, {}]
-        end
-        _serialize sets, attributes, context
-        sets.map(&:last)
+        models = model.to_a
+        result = _serialize models, attributes, context
+        models.map { |m| result[m] }.compact
       end
     end
   end
 
-  def self._serialize(mixed_value_outputs, attributes, context, only = nil, except = nil)
-    mixed_value_outputs.group_by { |v, _o| v.class }.each do |klass, value_outputs|
+  class PermissionDenied; end
+  PERMISSION_DENIED = PermissionDenied.new
+
+  def self._serialize(mixed_models, attributes, context, only = nil, except = nil)
+    output_for_model = {}
+    mixed_models.group_by(&:class).each do |klass, models|
       next unless klass.respond_to? :_serializer_field_info
-      models = value_outputs.map(&:first)
+      models.uniq!
       if attributes.any? { |k, _| k == :* }
         all_keys = klass._serializer_field_keys.map(&:to_sym) - [:defaults]
         all_keys &= only.map(&:to_sym) if only
@@ -71,72 +63,115 @@ module ArSerializer::Serializer
         ActiveRecord::Associations::Preloader.new.preload models, field.includes if field.includes.present?
       end
 
-      preloader_params = attributes.flat_map do |name, sub_args|
-        field_name = sub_args[:field_name] || name
-        klass._serializer_field_info(field_name).preloaders.map do |p|
-          [p, sub_args[:params]]
-        end
-      end
-      defaults = klass._serializer_field_info(:defaults)
-      if defaults
-        preloader_params += defaults.preloaders.map { |p| [p] }
-      end
-      preloader_values = preloader_params.compact.uniq.map do |key|
-        preloader, params = key
+      preload = lambda do |preloader, params|
         has_keyword = preloader.parameters.any? { |type, _name| %i[key keyreq keyrest].include? type }
         arity = preloader.arity.abs
         arguments = [models]
         if has_keyword
           arguments << context unless arity == 2
-          [key, preloader.call(*arguments, **(params || {}))]
+          preloader.call(*arguments, **(params || {}))
         else
           arguments << context unless arity == 1
-          [key, preloader.call(*arguments)]
+          preloader.call(*arguments)
         end
-      end.to_h
+      end
 
-      if defaults
-        preloadeds = defaults.preloaders.map { |p| preloader_values[[p]] } || []
-        value_outputs.each do |value, output|
-          data = value.instance_exec(*preloadeds, context, {}, &defaults.data_block)
-          output.update data
+      preloader_values = {}
+      permission = klass._serializer_field_info :permission
+      if permission
+        preloadeds = permission.preloaders.map do |p|
+          preloader_values[[p]] ||= preload.call p, nil
         end
+        models = models.select do |model|
+          model.instance_exec(*preloadeds, context, {}, &permission.data_block)
+        end
+      end
+
+      defaults = klass._serializer_field_info :defaults
+      if defaults
+        defaults.preloaders.each do |p|
+          preloader_values[[p]] ||= preload.call p, nil
+        end
+      end
+
+      attributes.each do |name, sub_args|
+        field_name = sub_args[:field_name] || name
+        klass._serializer_field_info(field_name).preloaders.each do |p|
+          params = sub_args[:params]
+          preloader_values[[p, params]] ||= preload.call p, params
+        end
+      end
+
+      models.each do |model|
+        output_for_model[model] = {}
       end
 
       attributes.each do |name, sub_arg|
         params = sub_arg[:params]
-        sub_calls = []
         column_name = sub_arg[:column_name] || name
         field_name = sub_arg[:field_name] || name
         info = klass._serializer_field_info field_name
         preloadeds = info.preloaders.map { |p| preloader_values[[p, params]] } || []
         data_block = info.data_block
-        value_outputs.each do |value, output|
-          child = value.instance_exec(*preloadeds, context, **(params || {}), &data_block)
-          if child.is_a?(Array) && child.all? { |el| el.is_a? ArSerializer::Serializable }
-            output[column_name] = child.map do |record|
-              data = {}
-              sub_calls << [record, data]
-              data
-            end
-          elsif child.respond_to? :ar_serializer_build_sub_calls
-            sub_output, record_elements = child.ar_serializer_build_sub_calls
-            record_elements.each { |o| sub_calls << o }
-            output[column_name] = sub_output
+        sub_results = {}
+        sub_models = []
+        models.each do |model|
+          value, output = :fixme
+          child = model.instance_exec(*preloadeds, context, **(params || {}), &data_block)
+          if child.is_a?(ArSerializer::ArrayLikeSerializable) || (child.is_a?(Array) && child.any? { |el| el.is_a? ArSerializer::Serializable })
+            sub_results[model] = [:multiple, child]
+            sub_models << child.grep(ArSerializer::Serializable)
+          elsif child.respond_to?(:ar_custom_serializable_models) && child.respond_to?(:ar_custom_serializable_data)
+            sub_results[model] = [:custom, child]
+            sub_models << child.ar_custom_serializable_models
           elsif child.is_a? ArSerializer::Serializable
-            data = {}
-            sub_calls << [child, data]
-            output[column_name] = data
+            sub_results[model] = [:single, child]
+            sub_models << child
           else
-            output[column_name] = child
+            sub_results[model] = [:data, child]
           end
         end
-        next if sub_calls.empty?
-        sub_attributes = sub_arg[:attributes] || {}
-        info.validate_attributes sub_attributes
-        _serialize sub_calls, sub_attributes, context, info.only, info.except
+
+        sub_models.flatten!
+        sub_models.uniq!
+        unless sub_models.empty?
+          sub_attributes = sub_arg[:attributes] || {}
+          info.validate_attributes sub_attributes
+          result = _serialize sub_models, sub_attributes, context, info.only, info.except
+        end
+
+        models.each do |model|
+          data = output_for_model[model]
+          type, res = sub_results[model]
+          case type
+          when :single
+            data[column_name] = result[res]
+          when :multiple
+            arr = data[column_name] = []
+            res.each do |r|
+              if r.is_a? ArSerializer::Serializable
+                arr << result[r] if result.key? r
+              else
+                arr << r
+              end
+            end
+          when :custom
+            data[column_name] = res.ar_custom_serializable_data result
+          when :data
+            data[column_name] = res
+          end
+        end
+      end
+
+      if defaults
+        preloadeds = defaults.preloaders.map { |p| preloader_values[[p]] } || []
+        models.each do |model|
+          data = model.instance_exec(*preloadeds, context, {}, &defaults.data_block)
+          output_for_model[model].update data
+        end
       end
     end
+    output_for_model
   end
 
   def self.deep_with_indifferent_access params
