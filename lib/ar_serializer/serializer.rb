@@ -80,7 +80,7 @@ module ArSerializer::Serializer
       permission = klass._serializer_field_info :permission
       if permission
         preloadeds = permission.preloaders.map do |p|
-          preloader_values[[p]] ||= preload.call p, nil
+          preloader_values[[p, nil]] ||= preload.call p, nil
         end
         models = models.select do |model|
           model.instance_exec(*preloadeds, context, {}, &permission.data_block)
@@ -90,7 +90,7 @@ module ArSerializer::Serializer
       defaults = klass._serializer_field_info :defaults
       if defaults
         defaults.preloaders.each do |p|
-          preloader_values[[p]] ||= preload.call p, nil
+          preloader_values[[p, nil]] ||= preload.call p, nil
         end
       end
 
