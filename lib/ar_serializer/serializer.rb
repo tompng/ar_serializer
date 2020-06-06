@@ -28,24 +28,21 @@ module ArSerializer::Serializer
     Thread.current[:ar_serializer_current_namespaces] = namespaces_was
   end
 
-  def self.serialize(model, query, context: nil, use: nil)
+  def self.serialize(model, query, context: nil, use: nil, permission: true)
     with_namespaces use do
       attributes = parse_args(query)[:attributes]
       if model.is_a?(ArSerializer::Serializable)
-        result = _serialize [model], attributes, context
+        result = _serialize [model], attributes, context, permission: permission
         result[model]
       else
         models = model.to_a
-        result = _serialize models, attributes, context
+        result = _serialize models, attributes, context, permission: permission
         models.map { |m| result[m] }.compact
       end
     end
   end
 
-  class PermissionDenied; end
-  PERMISSION_DENIED = PermissionDenied.new
-
-  def self._serialize(mixed_models, attributes, context, only = nil, except = nil)
+  def self._serialize(mixed_models, attributes, context, only: nil, except: nil, permission: true)
     output_for_model = {}
     mixed_models.group_by(&:class).each do |klass, models|
       next unless klass.respond_to? :_serializer_field_info
@@ -77,13 +74,13 @@ module ArSerializer::Serializer
       end
 
       preloader_values = {}
-      permission = klass._serializer_field_info :permission
-      if permission
-        preloadeds = permission.preloaders.map do |p|
+      permission_field = klass._serializer_field_info permission == true ? :permission : permission if permission
+      if permission_field
+        preloadeds = permission_field.preloaders.map do |p|
           preloader_values[[p, nil]] ||= preload.call p, nil
         end
         models = models.select do |model|
-          model.instance_exec(*preloadeds, context, {}, &permission.data_block)
+          model.instance_exec(*preloadeds, context, {}, &permission_field.data_block)
         end
       end
 
@@ -137,7 +134,14 @@ module ArSerializer::Serializer
         unless sub_models.empty?
           sub_attributes = sub_arg[:attributes] || {}
           info.validate_attributes sub_attributes
-          result = _serialize sub_models, sub_attributes, context, info.only, info.except
+          result = _serialize(
+            sub_models,
+            sub_attributes,
+            context,
+            only: info.only,
+            except: info.except,
+            permission: info.child_permission
+          )
         end
 
         models.each do |model|
