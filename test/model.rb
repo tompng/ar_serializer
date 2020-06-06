@@ -20,7 +20,7 @@ class User < ActiveRecord::Base
       ]
     end
   ) do |(lists, totals)|
-    models = lists ? list[id] : posts
+    models = lists[id]
     total = totals[id] || 0
     ArSerializer::CustomSerializable.new models do |result|
       { total: total, list: models.map(&result) }

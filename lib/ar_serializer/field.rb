@@ -238,7 +238,7 @@ class ArSerializer::Field
     order_key, order_mode = parse_order klass.reflect_on_association(name).klass, order, only: only, except: except
     return TopNLoader.load_associations klass, models.map(&:id), name, limit: limit, order: { order_key => order_mode } if limit
     ActiveRecord::Associations::Preloader.new.preload models, name
-    return if order.nil?
+    return models.map { |m| [m.id, m.send(name)] }.to_h if order.nil?
     models.map do |model|
       records_nonnils, records_nils = model.__send__(name).partition(&order_key)
       records = records_nils.sort_by(&:id) + records_nonnils.sort_by { |r| [r[order_key], r.id] }
