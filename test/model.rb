@@ -14,19 +14,17 @@ class User < ActiveRecord::Base
     :posts_with_total,
     type: -> { { total: :int, list: [Post] } },
     preload: lambda do |models, _context, **params|
-      {
-        list: ArSerializer::Field.preload_association(User, models, :posts, **params),
-        total: User.where(id: models.map(&:id)).joins(:posts).group(:id).count
-      }
+      [
+        ArSerializer::Field.preload_association(User, models, :posts, **params),
+        User.where(id: models.map(&:id)).joins(:posts).group(:id).count
+      ]
     end
-  ) do |preloaded|
-    sub_models = preloaded[:list] ? preloaded[:list][id] : posts
-    total = preloaded[:total][id] || 0
-    sub_outputs = sub_models.map { {} }
-    ArSerializer::CompositeValue.new(
-      pairs: sub_models.zip(sub_outputs),
-      output: { total: total || 0, list: sub_outputs }
-    )
+  ) do |(lists, totals)|
+    models = lists ? list[id] : posts
+    total = totals[id] || 0
+    ArSerializer::CustomSerializable.new models do |result|
+      { total: total, list: models.map(&result) }
+    end
   end
 end
 
