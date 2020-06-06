@@ -402,6 +402,7 @@ class ArSerializerTest < Minitest::Test
     assert_equal ArSerializer.serialize(obj, :id), { id: 1 }
     assert_equal ArSerializer.serialize(obj, :id, use: :foo), { id: 1, bar: 2, baz: 3 }
     assert_equal ArSerializer.serialize(obj, :*, use: :foo), { id: 1, name: 'name', bar: 2, baz: 3 }
+    assert_raises(ArSerializer::InvalidQuery) { ArSerializer.serialize obj, :defaults }
   end
 
   def test_has_one_permission

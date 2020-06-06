@@ -48,7 +48,7 @@ module ArSerializer::Serializer
       next unless klass.respond_to? :_serializer_field_info
       models.uniq!
       if attributes.any? { |k, _| k == :* }
-        all_keys = klass._serializer_field_keys.map(&:to_sym) - [:defaults]
+        all_keys = klass._serializer_field_keys.map(&:to_sym)
         all_keys &= only.map(&:to_sym) if only
         all_keys -= except.map(&:to_sym) if except
         attributes = all_keys.map { |k| [k, {}] } + attributes.reject { |k, _| k == :* }
@@ -56,7 +56,10 @@ module ArSerializer::Serializer
       attributes.each do |name, sub_args|
         field_name = sub_args[:field_name] || name
         field = klass._serializer_field_info field_name
-        raise ArSerializer::InvalidQuery, "No serializer field `#{field_name}`#{" namespaces: #{current_namespaces.compact}" if current_namespaces.any?} for #{klass}" unless field
+        if field.nil? || field.private?
+          message = "No serializer field `#{field_name}`#{" namespaces: #{current_namespaces.compact}" if current_namespaces.any?} for #{klass}"
+          raise ArSerializer::InvalidQuery, message
+        end
         ActiveRecord::Associations::Preloader.new.preload models, field.includes if field.includes.present?
       end
 

@@ -3,13 +3,14 @@ require 'top_n_loader'
 
 class ArSerializer::Field
   attr_reader :includes, :preloaders, :data_block, :only, :except, :child_permission, :order_column
-  def initialize klass, name, includes: nil, preloaders: [], data_block:, only: nil, except: nil, child_permission: nil, order_column: nil, orderable: nil, type: nil, params_type: nil
+  def initialize klass, name, includes: nil, preloaders: [], data_block:, only: nil, except: nil, private: false, child_permission: nil, order_column: nil, orderable: nil, type: nil, params_type: nil
     @klass = klass
     @name = name
     @includes = includes
     @preloaders = preloaders
     @only = only && [*only].map(&:to_s)
     @except = except && [*except].map(&:to_s)
+    @private = private
     @child_permission = child_permission.nil? ? true : child_permission
     @data_block = data_block
     @order_column = order_column
@@ -21,6 +22,10 @@ class ArSerializer::Field
   def orderable?
     return @orderable unless @orderable.nil?
     @orderable = @klass.has_attribute? (@order_column || @name).to_s.underscore
+  end
+
+  def private?
+    @private
   end
 
   def type
@@ -128,7 +133,7 @@ class ArSerializer::Field
     }[attr_type.type]
   end
 
-  def self.create(klass, name, type: nil, params_type: nil, count_of: nil, includes: nil, preload: nil, only: nil, except: nil, child_permission: nil, order_column: nil, orderable: nil, &data_block)
+  def self.create(klass, name, type: nil, params_type: nil, count_of: nil, includes: nil, preload: nil, only: nil, except: nil, private: nil, child_permission: nil, order_column: nil, orderable: nil, &data_block)
     name = name.to_s
     if count_of
       if includes || preload || data_block || only || except || order_column || orderable || child_permission != nil
@@ -156,10 +161,10 @@ class ArSerializer::Field
         :any
       end
     end
-    custom_field klass, name, includes: includes, preload: preload, only: only, except: except, child_permission: child_permission, order_column: order_column, orderable: orderable, type: type, params_type: params_type, &data_block
+    custom_field klass, name, includes: includes, preload: preload, only: only, except: except, private: private, child_permission: child_permission, order_column: order_column, orderable: orderable, type: type, params_type: params_type, &data_block
   end
 
-  def self.custom_field(klass, name, includes:, preload:, only:, except:, child_permission: nil, order_column:, orderable:, type:, params_type:, &data_block)
+  def self.custom_field(klass, name, includes:, preload:, only:, except:, private:, child_permission: nil, order_column:, orderable:, type:, params_type:, &data_block)
     underscore_name = name.underscore
     if preload
       preloaders = Array(preload).map do |preloader|
@@ -178,7 +183,7 @@ class ArSerializer::Field
     new(
       klass,
       name,
-      includes: includes, preloaders: preloaders, only: only, except: except, child_permission: child_permission, order_column: order_column, orderable: orderable, type: type, params_type: params_type,
+      includes: includes, preloaders: preloaders, only: only, except: except, private: private, child_permission: child_permission, order_column: order_column, orderable: orderable, type: type, params_type: params_type,
       data_block: data_block || ->(_context, **_params) { __send__ underscore_name }
     )
   end
