@@ -116,7 +116,6 @@ module ArSerializer::Serializer
         sub_results = {}
         sub_models = []
         models.each do |model|
-          value, output = :fixme
           child = model.instance_exec(*preloadeds, context, **(params || {}), &data_block)
           if child.is_a?(ArSerializer::ArrayLikeSerializable) || (child.is_a?(Array) && child.any? { |el| el.is_a? ArSerializer::Serializable })
             sub_results[model] = [:multiple, child]
