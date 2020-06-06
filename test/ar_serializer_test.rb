@@ -404,6 +404,54 @@ class ArSerializerTest < Minitest::Test
     assert_equal ArSerializer.serialize(obj, :*, use: :foo), { id: 1, name: 'name', bar: 2, baz: 3 }
   end
 
+  def test_has_one_permission
+    ns = :test_has_one_permission
+    User.serializer_permission(namespace: ns) { id.odd? }
+    Comment.serializer_field :userId, namespace: ns
+    query = { comments: [:userId, :user] }
+    result = ArSerializer.serialize Post.all, query, use: ns
+    comments = result.flat_map { |p| p[:comments] }
+    assert comments.any? { |c| c[:userId].odd? }
+    assert comments.any? { |c| c[:userId].even? }
+    assert comments.all? { |c| c[:userId].odd? == !!c[:user] }
+  end
+
+  def test_has_many_permission
+    ns = :test_has_many_permission
+    Comment.serializer_permission(namespace: ns) { user_id.odd? }
+    query = { posts: { comments: { user: :id } } }
+    result = ArSerializer.serialize User.all, query, use: ns
+    comments = result.map { |u| u[:posts].map { |p| p[:comments] } }.flatten
+    assert comments.all? { |c| c[:user][:id].odd? }
+    assert_equal Comment.where('user_id % 2 = 1').count, comments.size
+  end
+
+  def test_permission_preloader
+    ns = :test_permission_preloader
+    p1_count = 0
+    p2_count = 0
+    p3_count = 0
+    preloader1 = ->(users) { $a=users;p1_count += 1; [:p1, users.size] }
+    preloader2 = ->(users) { $b=users;p2_count += 1; [:p2, users.size] }
+    preloader3 = ->(users) { $c=users;p3_count += 1; [:p3, users.size] }
+    commented_users_count = Comment.distinct.count(:user_id)
+    User.serializer_permission namespace: ns, preload: [preloader1, preloader2] do |p1, p2|
+      raise unless p1 == [:p1, commented_users_count]
+      raise unless p2 == [:p2, commented_users_count]
+      id.odd?
+    end
+    User.serializer_field :test, namespace: ns, preload: [preloader2, preloader3] do |p2, p3|
+      p2 + p3
+    end
+    query = { user: [:id, :test] }
+    comments = ArSerializer.serialize Comment.all, query, use: ns
+    users = comments.map { |c| c[:user] }.compact
+    assert users.any?
+    assert commented_users_count != users.size
+    assert_equal [:p2, commented_users_count, :p3, users.uniq.size], users[0][:test]
+    assert_equal [1, 1, 1], [p1_count, p2_count, p3_count]
+  end
+
   def test_schema
     schema = Class.new do
       def self.name
