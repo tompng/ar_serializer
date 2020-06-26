@@ -142,7 +142,7 @@ module ArSerializer::Serializer
             context,
             only: info.only,
             except: info.except,
-            permission: info.child_permission
+            permission: info.scoped_access
           )
         end
 
