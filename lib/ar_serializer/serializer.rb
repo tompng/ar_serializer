@@ -37,28 +37,27 @@ module ArSerializer::Serializer
     Thread.current[:ar_serializer_current_namespaces] = namespaces_was
   end
 
-  def self.serialize(model, query, context: nil, include_id: false, use: nil)
+  def self.serialize(model, query, context: nil, use: nil)
     with_namespaces use do
       attributes = parse_args(query)[:attributes]
       if model.is_a?(ArSerializer::Serializable)
         output = {}
-        _serialize [[model, output]], attributes, context, include_id
+        _serialize [[model, output]], attributes, context
         output
       else
         sets = model.to_a.map do |record|
           [record, {}]
         end
-        _serialize sets, attributes, context, include_id
+        _serialize sets, attributes, context
         sets.map(&:last)
       end
     end
   end
 
-  def self._serialize(mixed_value_outputs, attributes, context, include_id, only = nil, except = nil)
+  def self._serialize(mixed_value_outputs, attributes, context, only = nil, except = nil)
     mixed_value_outputs.group_by { |v, _o| v.class }.each do |klass, value_outputs|
       next unless klass.respond_to? :_serializer_field_info
       models = value_outputs.map(&:first)
-      value_outputs.each { |value, output| output[:id] = value.id } if include_id && klass.method_defined?(:id)
       if attributes.any? { |k, _| k == :* }
         all_keys = klass._serializer_field_keys.map(&:to_sym) - [:defaults]
         all_keys &= only.map(&:to_sym) if only
@@ -135,7 +134,7 @@ module ArSerializer::Serializer
         next if sub_calls.empty?
         sub_attributes = sub_arg[:attributes] || {}
         info.validate_attributes sub_attributes
-        _serialize sub_calls, sub_attributes, context, include_id, info.only, info.except
+        _serialize sub_calls, sub_attributes, context, info.only, info.except
       end
     end
   end
