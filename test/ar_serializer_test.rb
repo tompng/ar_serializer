@@ -50,6 +50,13 @@ class ArSerializerTest < Minitest::Test
     assert_equal expected, ArSerializer.serialize(user, [:name, posts: :title])
   end
 
+  def test_child_nil
+    post = Post.first
+    post.user = nil
+    expected = { user: nil }
+    assert_equal expected, ArSerializer.serialize(post, :user)
+  end
+
   def test_context
     star = Star.first
     user = star.user
@@ -281,7 +288,6 @@ class ArSerializerTest < Minitest::Test
       ArSerializer.serialize user_class.all, { postsOnlyTitle: [:title, params: { order: { body: :asc } }] }
     end
   end
-
 
   def test_subclasses
     klass = Class.new User do

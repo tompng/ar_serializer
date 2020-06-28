@@ -228,13 +228,16 @@ class ArSerializer::Field
           order?: orderable_keys.map { |key| { key => modes } } +  modes
         }
       }
+      data_block = lambda do |preloaded, _context, **_params|
+        preloaded ? preloaded[id] || [] : __send__(underscore_name)
+      end
     else
       preloader = lambda do |models, _context, **_params|
         preload_association klass, models, underscore_name
       end
-    end
-    data_block = lambda do |preloaded, _context, **_params|
-      preloaded ? preloaded[id] || [] : __send__(underscore_name)
+      data_block = lambda do |preloaded, _context, **_params|
+        preloaded ? preloaded[id] : __send__(underscore_name)
+      end
     end
     new klass, name, preloaders: [preloader], data_block: data_block, only: only, except: except, scoped_access: scoped_access, type: type, params_type: params_type, orderable: false
   end
