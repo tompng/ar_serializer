@@ -26,18 +26,16 @@ module ArSerializer::Serializable
     end
 
     def _serializer_field_keys
-      keys = []
-      ArSerializer::Serializer.current_namespaces.each do |ns|
-        keys |= _serializer_namespace(ns).keys
-      end
+      keys = ArSerializer::Serializer.current_namespaces.map do |ns|
+        _serializer_namespace(ns).keys
+      end.inject(:|)
       keys |= superclass._serializer_field_keys if superclass < ArSerializer::Serializable
       keys
     end
 
     def _serializer_orderable_field_keys
       _serializer_field_keys.select do |name|
-        field = _serializer_field_info(name)
-        field.orderable && has_attribute?((field.order_column || name).to_s.downcase)
+        _serializer_field_info(name).orderable?
       end
     end
 
