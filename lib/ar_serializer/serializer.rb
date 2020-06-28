@@ -31,7 +31,7 @@ module ArSerializer::Serializer
 
   def self.with_namespaces(namespaces)
     namespaces_was = Thread.current[:ar_serializer_current_namespaces]
-    Thread.current[:ar_serializer_current_namespaces] = Array(namespaces).compact + [nil]
+    Thread.current[:ar_serializer_current_namespaces] = Array(namespaces) | [nil]
     yield
   ensure
     Thread.current[:ar_serializer_current_namespaces] = namespaces_was
@@ -68,7 +68,7 @@ module ArSerializer::Serializer
       attributes.each do |name, sub_args|
         field_name = sub_args[:field_name] || name
         field = klass._serializer_field_info field_name
-        raise ArSerializer::InvalidQuery, "No serializer field `#{field_name}`#{" namespaces: #{current_namespaces}" if current_namespaces.any?} for #{klass}" unless field
+        raise ArSerializer::InvalidQuery, "No serializer field `#{field_name}`#{" namespaces: #{current_namespaces.compact}" if current_namespaces.any?} for #{klass}" unless field
         ActiveRecord::Associations::Preloader.new.preload models, field.includes if field.includes.present?
       end
 
