@@ -162,7 +162,7 @@ module ArSerializer::Serializer
               end
             end
           when :custom
-            data[column_name] = res.ar_custom_serializable_data result
+            data[column_name] = res.ar_custom_serializable_data result || {}
           when :data
             data[column_name] = res
           end
