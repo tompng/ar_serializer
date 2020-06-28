@@ -210,7 +210,7 @@ class ArSerializerTest < Minitest::Test
 
   def test_association_params
     user = Comment.first.post.user
-    expected = { posts: user.posts.map { |p| { comments: [{ id: p.comments.order(body: :asc).first.id }] } } }
+    expected = { posts: user.posts.map { |p| { comments: p.comments.order(body: :asc).limit(1).map { |c| { id: c.id } } } } }
     query = { posts: { comments: [:id, params: { limit: 1, order: { body: :asc } }] } }
     data = ArSerializer.serialize user, query
     assert_equal expected, data
@@ -253,6 +253,35 @@ class ArSerializerTest < Minitest::Test
       ArSerializer.serialize user_class.all, query
     end
   end
+
+  def test_reject_unorderable_key_ordering
+    post_class = Class.new ActiveRecord::Base do
+      self.table_name = :posts
+      serializer_field :title, :createdAt
+      serializer_field :body, orderable: false
+    end
+    user_class = Class.new ActiveRecord::Base do
+      self.table_name = :users
+      has_many :posts, anonymous_class: post_class, foreign_key: :user_id
+      serializer_field :posts
+      serializer_field :postsExceptCreatedAt, association: :posts, only: [:title, :body]
+      serializer_field :postsOnlyTitle, association: :posts, only: :title
+    end
+    assert ArSerializer.serialize(user_class.all, { posts: [:title, :body, params: { order: { title: :asc } }] })
+    assert ArSerializer.serialize(user_class.all, { posts: [:title, params: { order: { createdAt: :asc } }] })
+    assert ArSerializer.serialize(user_class.all, { postsExceptCreatedAt: [:title, params: { order: { title: :asc } }] })
+    assert ArSerializer.serialize(user_class.all, { postsOnlyTitle: [:title, params: { order: { title: :asc } }] })
+    assert_raises(ArSerializer::InvalidQuery) do
+      ArSerializer.serialize user_class.all, { posts: [:title, :body, params: { order: { body: :asc } }] }
+    end
+    assert_raises(ArSerializer::InvalidQuery) do
+      ArSerializer.serialize user_class.all, { postsExceptCreatedAt: [:title, params: { order: { createdAt: :asc } }] }
+    end
+    assert_raises(ArSerializer::InvalidQuery) do
+      ArSerializer.serialize user_class.all, { postsOnlyTitle: [:title, params: { order: { body: :asc } }] }
+    end
+  end
+
 
   def test_subclasses
     klass = Class.new User do

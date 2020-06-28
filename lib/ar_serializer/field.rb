@@ -3,15 +3,23 @@ require 'top_n_loader'
 
 class ArSerializer::Field
   attr_reader :includes, :preloaders, :data_block, :only, :except, :order_column
-  def initialize includes: nil, preloaders: [], data_block:, only: nil, except: nil, order_column: nil, type: nil, params_type: nil
+  def initialize klass, name, includes: nil, preloaders: [], data_block:, only: nil, except: nil, order_column: nil, orderable: nil, type: nil, params_type: nil
+    @klass = klass
+    @name = name
     @includes = includes
     @preloaders = preloaders
     @only = only && [*only].map(&:to_s)
     @except = except && [*except].map(&:to_s)
     @data_block = data_block
     @order_column = order_column
+    @orderable = orderable
     @type = type
     @params_type = params_type
+  end
+
+  def orderable?
+    return @orderable unless @orderable.nil?
+    @orderable = @klass.has_attribute?(@order_column || @name).to_s.underscore
   end
 
   def type
@@ -34,7 +42,7 @@ class ArSerializer::Field
   end
 
   def arguments
-    return @params_type if @params_type
+    return @params_type.is_a?(Proc) ? @params_type.call : @params_type if @params_type
     @preloaders.size
     @data_block.parameters
     parameters_list = [@data_block.parameters.drop(@preloaders.size + 1)]
@@ -79,14 +87,14 @@ class ArSerializer::Field
     raise ArSerializer::InvalidQuery, "unpermitted attribute: #{invalid_keys}"
   end
 
-  def self.count_field(klass, association_name)
+  def self.count_field(klass, name, association_name)
     preloader = lambda do |models|
       klass.joins(association_name).where(id: models.map(&:id)).group(:id).count
     end
     data_block = lambda do |preloaded, _context, **_params|
       preloaded[id] || 0
     end
-    new preloaders: [preloader], data_block: data_block, type: :int
+    new klass, name, preloaders: [preloader], data_block: data_block, type: :int, orderable: false
   end
 
   def self.type_from_column_type(klass, name)
@@ -119,15 +127,15 @@ class ArSerializer::Field
     }[attr_type.type]
   end
 
-  def self.create(klass, name, type: nil, params_type: nil, count_of: nil, includes: nil, preload: nil, only: nil, except: nil, order_column: nil, &data_block)
+  def self.create(klass, name, type: nil, params_type: nil, count_of: nil, includes: nil, preload: nil, only: nil, except: nil, order_column: nil, orderable: nil, &data_block)
+    name = name.to_s
     if count_of
-      if includes || preload || data_block || only || except
-        raise ArgumentError, 'includes, preload block cannot be used with count_of'
+      if includes || preload || data_block || only || except || order_column || orderable
+        raise ArgumentError, 'wrong options for count_of field'
       end
-      return count_field klass, count_of
+      return count_field klass, name, count_of
     end
-    underscore_name = name.to_s.underscore
-    association = klass.reflect_on_association underscore_name if klass.respond_to? :reflect_on_association
+    association = klass.reflect_on_association name.underscore if klass.respond_to? :reflect_on_association
     if association
       if association.collection?
         type ||= -> { [association.klass] }
@@ -136,21 +144,22 @@ class ArSerializer::Field
       else
         type ||= -> { association.klass }
       end
-      return association_field klass, underscore_name, only: only, except: except, type: type, collection: association.collection? if !includes && !preload && !data_block && !params_type
+      return association_field klass, name, only: only, except: except, type: type, collection: association.collection? if !includes && !preload && !data_block && !params_type
     end
     type ||= lambda do
       if klass.respond_to? :column_for_attribute
-        type_from_column_type klass, underscore_name
+        type_from_column_type klass, name.underscore
       elsif klass.respond_to? :attribute_types
-        type_from_attribute_type(klass, underscore_name) || :any
+        type_from_attribute_type(klass, name.underscore) || :any
       else
         :any
       end
     end
-    custom_field klass, underscore_name, includes: includes, preload: preload, only: only, except: except, order_column: order_column, type: type, params_type: params_type, &data_block
+    custom_field klass, name, includes: includes, preload: preload, only: only, except: except, order_column: order_column, orderable: orderable, type: type, params_type: params_type, &data_block
   end
 
-  def self.custom_field(klass, name, includes:, preload:, only:, except:, order_column:, type:, params_type:, &data_block)
+  def self.custom_field(klass, name, includes:, preload:, only:, except:, order_column:, orderable:, type:, params_type:, &data_block)
+    underscore_name = name.underscore
     if preload
       preloaders = Array(preload).map do |preloader|
         next preloader if preloader.is_a? Proc
@@ -161,55 +170,72 @@ class ArSerializer::Field
       end
     else
       preloaders = []
-      includes ||= name if klass.respond_to?(:reflect_on_association) && klass.reflect_on_association(name)
+      includes ||= underscore_name if klass.respond_to?(:reflect_on_association) && klass.reflect_on_association(underscore_name)
     end
     data_block ||= ->(preloaded, _context, **_params) { preloaded[id] } if preloaders.size == 1
     raise ArgumentError, 'data_block needed if multiple preloaders are present' if !preloaders.empty? && data_block.nil?
     new(
-      includes: includes, preloaders: preloaders, only: only, except: except, order_column: order_column, type: type, params_type: params_type,
-      data_block: data_block || ->(_context, **_params) { send name }
+      klass,
+      name,
+      includes: includes, preloaders: preloaders, only: only, except: except, order_column: order_column, orderable: orderable, type: type, params_type: params_type,
+      data_block: data_block || ->(_context, **_params) { send underscore_name }
     )
   end
 
-  def self.parse_order(klass, order)
-    key, mode = begin
+  def self.parse_order(klass, order, only: nil, except: nil)
+    primary_key = klass.primary_key.to_sym
+    key, mode = (
       case order
       when Hash
         raise ArSerializer::InvalidQuery, 'invalid order' unless order.size == 1
-        order.first
+        order.first.map(&:to_sym)
       when Symbol, 'asc', 'desc'
-        [klass.primary_key, order]
+        [primary_key, order.to_sym]
       when NilClass
-        [klass.primary_key, :asc]
+        [primary_key, :asc]
       end
-    end
+    )
     info = klass._serializer_field_info(key)
-    key = info&.order_column || key.to_s.underscore
-    raise ArSerializer::InvalidQuery, "unpermitted order key: #{key}" unless klass.primary_key == key.to_s || (klass.has_attribute?(key) && info)
-    raise ArSerializer::InvalidQuery, "invalid order mode: #{mode.inspect}" unless [:asc, :desc, 'asc', 'desc'].include? mode
-    [key.to_sym, mode.to_sym]
+    order_key = (info&.order_column || key).to_s.underscore.to_sym
+    raise ArSerializer::InvalidQuery, "invalid order mode: #{mode.inspect}" unless [:asc, :desc].include? mode
+    raise ArSerializer::InvalidQuery, "unpermitted order key: #{key}" unless key == primary_key || (info&.orderable? && (!only || only.include?(key)) && !except&.include?(key))
+    [order_key, mode]
   end
 
   def self.association_field(klass, name, only:, except:, type:, collection:)
+    underscore_name = name.underscore
+    only = [*only] if only
+    except = [*except] if except
     if collection
       preloader = lambda do |models, _context, limit: nil, order: nil, **_option|
-        preload_association klass, models, name, limit: limit, order: order
+        preload_association klass, models, underscore_name, limit: limit, order: order, only: only, except: except
       end
-      params_type = { limit?: :int, order?: [{ :* => %w[asc desc] }, 'asc', 'desc'] }
+      params_type = -> {
+        orderable_keys = klass.reflect_on_association(underscore_name).klass._serializer_orderable_field_keys
+        orderable_keys &= only.map(&:to_s) if only
+        orderable_keys -= except.map(&:to_s) if except
+        orderable_keys |= ['id']
+        orderable_keys.sort!
+        modes = %w[asc desc]
+        {
+          limit?: :int,
+          order?: orderable_keys.map { |key| { key => modes } } +  modes
+        }
+      }
     else
       preloader = lambda do |models, _context, **_params|
-        preload_association klass, models, name
+        preload_association klass, models, underscore_name
       end
     end
     data_block = lambda do |preloaded, _context, **_params|
-      preloaded ? preloaded[id] || [] : send(name)
+      preloaded ? preloaded[id] || [] : send(underscore_name)
     end
-    new preloaders: [preloader], data_block: data_block, only: only, except: except, type: type, params_type: params_type
+    new klass, name, preloaders: [preloader], data_block: data_block, only: only, except: except, type: type, params_type: params_type, orderable: false
   end
 
-  def self.preload_association(klass, models, name, limit: nil, order: nil)
+  def self.preload_association(klass, models, name, limit: nil, order: nil, only: nil, except: nil)
     limit = limit&.to_i
-    order_key, order_mode = parse_order klass.reflect_on_association(name).klass, order
+    order_key, order_mode = parse_order klass.reflect_on_association(name).klass, order, only: only, except: except
     return TopNLoader.load_associations klass, models.map(&:id), name, limit: limit, order: { order_key => order_mode } if limit
     ActiveRecord::Associations::Preloader.new.preload models, name
     return if order.nil?
