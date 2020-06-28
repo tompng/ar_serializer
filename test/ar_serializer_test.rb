@@ -210,7 +210,7 @@ class ArSerializerTest < Minitest::Test
 
   def test_association_params
     user = Comment.first.post.user
-    expected = { posts: user.posts.map { |p| { comments: [{ id: p.comments.order(body: :asc).first.id }] } } }
+    expected = { posts: user.posts.map { |p| { comments: p.comments.order(body: :asc).limit(1).map { |c| { id: c.id } } } } }
     query = { posts: { comments: [:id, params: { limit: 1, order: { body: :asc } }] } }
     data = ArSerializer.serialize user, query
     assert_equal expected, data
