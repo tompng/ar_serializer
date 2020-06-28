@@ -172,29 +172,32 @@ class ArSerializer::Field
     )
   end
 
-  def self.parse_order(klass, order)
+  def self.parse_order(klass, order, only: nil, except: nil)
+    primary_key = klass.primary_key.to_sym
     key, mode = (
       case order
       when Hash
         raise ArSerializer::InvalidQuery, 'invalid order' unless order.size == 1
-        order.first
+        order.first.map(&:to_sym)
       when Symbol, 'asc', 'desc'
-        [klass.primary_key, order]
+        [primary_key, order.to_sym]
       when NilClass
-        [klass.primary_key, :asc]
+        [primary_key, :asc]
       end
     )
     info = klass._serializer_field_info(key)
-    key = (info&.order_column || key).to_s.underscore.to_sym
-    raise ArSerializer::InvalidQuery, "unpermitted order key: #{key}" unless key.to_s == klass.primary_key || info&.orderable
-    raise ArSerializer::InvalidQuery, "invalid order mode: #{mode.inspect}" unless [:asc, :desc, 'asc', 'desc'].include? mode
-    [key.to_sym, mode.to_sym]
+    order_key = (info&.order_column || key).to_s.underscore.to_sym
+    raise ArSerializer::InvalidQuery, "invalid order mode: #{mode.inspect}" unless [:asc, :desc].include? mode
+    raise ArSerializer::InvalidQuery, "unpermitted order key: #{key}" unless key == primary_key || (info&.orderable && (!only || only.include?(key)) && !except&.include?(key))
+    [order_key, mode]
   end
 
   def self.association_field(klass, name, only:, except:, type:, collection:)
+    only = [*only] if only
+    except = [*except] if except
     if collection
       preloader = lambda do |models, _context, limit: nil, order: nil, **_option|
-        preload_association klass, models, name, limit: limit, order: order
+        preload_association klass, models, name, limit: limit, order: order, only: only, except: except
       end
       params_type = { limit?: :int, order?: [{ :* => %w[asc desc] }, 'asc', 'desc'] }
     else
@@ -208,9 +211,9 @@ class ArSerializer::Field
     new preloaders: [preloader], data_block: data_block, only: only, except: except, type: type, params_type: params_type
   end
 
-  def self.preload_association(klass, models, name, limit: nil, order: nil)
+  def self.preload_association(klass, models, name, limit: nil, order: nil, only: nil, except: nil)
     limit = limit&.to_i
-    order_key, order_mode = parse_order klass.reflect_on_association(name).klass, order
+    order_key, order_mode = parse_order klass.reflect_on_association(name).klass, order, only: only, except: except
     return TopNLoader.load_associations klass, models.map(&:id), name, limit: limit, order: { order_key => order_mode } if limit
     ActiveRecord::Associations::Preloader.new.preload models, name
     return if order.nil?

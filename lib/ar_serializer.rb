@@ -26,7 +26,6 @@ module ArSerializer::Serializable
     end
 
     def _serializer_field_keys
-      namespaces = ArSerializer::Serializer.current_namespaces
       keys = []
       ArSerializer::Serializer.current_namespaces.each do |ns|
         keys |= _serializer_namespace(ns).keys
