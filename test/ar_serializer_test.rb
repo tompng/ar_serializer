@@ -438,9 +438,9 @@ class ArSerializerTest < Minitest::Test
     p1_count = 0
     p2_count = 0
     p3_count = 0
-    preloader1 = ->(users) { $a=users;p1_count += 1; [:p1, users.size] }
-    preloader2 = ->(users) { $b=users;p2_count += 1; [:p2, users.size] }
-    preloader3 = ->(users) { $c=users;p3_count += 1; [:p3, users.size] }
+    preloader1 = ->(users) { p1_count += 1; [:p1, users.size] }
+    preloader2 = ->(users) { p2_count += 1; [:p2, users.size] }
+    preloader3 = ->(users) { p3_count += 1; [:p3, users.size] }
     commented_users_count = Comment.distinct.count(:user_id)
     User.serializer_permission namespace: ns, preload: [preloader1, preloader2] do |p1, p2|
       raise unless p1 == [:p1, commented_users_count]
