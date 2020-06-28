@@ -347,8 +347,6 @@ class ArSerializerTest < Minitest::Test
       user.posts.each do |post|
         post.update column => rand.days.ago
       end
-
-      binding.irb if user.posts.order(column => :asc).ids != get_target_ids.call
       assert_equal user.posts.order(column => :asc).ids, get_target_ids.call
     end
   end

@@ -35,7 +35,7 @@ class ArSerializer::Field
   end
 
   def arguments
-    return @params_type if @params_type
+    return @params_type.is_a?(Proc) ? @params_type.call : @params_type if @params_type
     @preloaders.size
     @data_block.parameters
     parameters_list = [@data_block.parameters.drop(@preloaders.size + 1)]
@@ -188,7 +188,7 @@ class ArSerializer::Field
     info = klass._serializer_field_info(key)
     order_key = (info&.order_column || key).to_s.underscore.to_sym
     raise ArSerializer::InvalidQuery, "invalid order mode: #{mode.inspect}" unless [:asc, :desc].include? mode
-    raise ArSerializer::InvalidQuery, "unpermitted order key: #{key}" unless key == primary_key || (info&.orderable && (!only || only.include?(key)) && !except&.include?(key))
+    raise ArSerializer::InvalidQuery, "unpermitted order key: #{key}" unless key == primary_key || (info&.orderable && (!only || only.include?(key)) && !except&.include?(key) && klass.has_attribute?(order_key))
     [order_key, mode]
   end
 
@@ -199,7 +199,18 @@ class ArSerializer::Field
       preloader = lambda do |models, _context, limit: nil, order: nil, **_option|
         preload_association klass, models, name, limit: limit, order: order, only: only, except: except
       end
-      params_type = { limit?: :int, order?: [{ :* => %w[asc desc] }, 'asc', 'desc'] }
+      params_type = -> {
+        orderable_keys = klass.reflect_on_association(name).klass._serializer_orderable_field_keys
+        orderable_keys &= only.map(&:to_s) if only
+        orderable_keys -= except.map(&:to_s) if except
+        orderable_keys |= ['id']
+        orderable_keys.sort!
+        modes = %w[asc desc]
+        {
+          limit?: :int,
+          order?: orderable_keys.map { |key| { key => modes } } +  modes
+        }
+      }
     else
       preloader = lambda do |models, _context, **_params|
         preload_association klass, models, name

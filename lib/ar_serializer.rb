@@ -34,6 +34,13 @@ module ArSerializer::Serializable
       keys
     end
 
+    def _serializer_orderable_field_keys
+      _serializer_field_keys.select do |name|
+        field = _serializer_field_info(name)
+        field.orderable && has_attribute?((field.order_column || name).to_s.downcase)
+      end
+    end
+
     def serializer_field(*names, namespace: nil, association: nil, **option, &data_block)
       namespaces = namespace.is_a?(Array) ? namespace : [namespace]
       namespaces.each do |ns|
