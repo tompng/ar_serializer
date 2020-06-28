@@ -2,14 +2,15 @@ require 'ar_serializer/error'
 require 'top_n_loader'
 
 class ArSerializer::Field
-  attr_reader :includes, :preloaders, :data_block, :only, :except, :order_column
-  def initialize includes: nil, preloaders: [], data_block:, only: nil, except: nil, order_column: nil, type: nil, params_type: nil
+  attr_reader :includes, :preloaders, :data_block, :only, :except, :order_column, :orderable
+  def initialize includes: nil, preloaders: [], data_block:, only: nil, except: nil, order_column: nil, orderable: nil, type: nil, params_type: nil
     @includes = includes
     @preloaders = preloaders
     @only = only && [*only].map(&:to_s)
     @except = except && [*except].map(&:to_s)
     @data_block = data_block
     @order_column = order_column
+    @orderable = !(orderable == false)
     @type = type
     @params_type = params_type
   end
@@ -119,10 +120,10 @@ class ArSerializer::Field
     }[attr_type.type]
   end
 
-  def self.create(klass, name, type: nil, params_type: nil, count_of: nil, includes: nil, preload: nil, only: nil, except: nil, order_column: nil, &data_block)
+  def self.create(klass, name, type: nil, params_type: nil, count_of: nil, includes: nil, preload: nil, only: nil, except: nil, order_column: nil, orderable: nil, &data_block)
     if count_of
-      if includes || preload || data_block || only || except
-        raise ArgumentError, 'includes, preload block cannot be used with count_of'
+      if includes || preload || data_block || only || except || order_column || orderable
+        raise ArgumentError, 'wrong options for count_of field'
       end
       return count_field klass, count_of
     end
@@ -147,10 +148,10 @@ class ArSerializer::Field
         :any
       end
     end
-    custom_field klass, underscore_name, includes: includes, preload: preload, only: only, except: except, order_column: order_column, type: type, params_type: params_type, &data_block
+    custom_field klass, underscore_name, includes: includes, preload: preload, only: only, except: except, order_column: order_column, orderable: orderable, type: type, params_type: params_type, &data_block
   end
 
-  def self.custom_field(klass, name, includes:, preload:, only:, except:, order_column:, type:, params_type:, &data_block)
+  def self.custom_field(klass, name, includes:, preload:, only:, except:, order_column:, orderable:, type:, params_type:, &data_block)
     if preload
       preloaders = Array(preload).map do |preloader|
         next preloader if preloader.is_a? Proc
@@ -166,13 +167,13 @@ class ArSerializer::Field
     data_block ||= ->(preloaded, _context, **_params) { preloaded[id] } if preloaders.size == 1
     raise ArgumentError, 'data_block needed if multiple preloaders are present' if !preloaders.empty? && data_block.nil?
     new(
-      includes: includes, preloaders: preloaders, only: only, except: except, order_column: order_column, type: type, params_type: params_type,
+      includes: includes, preloaders: preloaders, only: only, except: except, order_column: order_column, orderable: orderable, type: type, params_type: params_type,
       data_block: data_block || ->(_context, **_params) { send name }
     )
   end
 
   def self.parse_order(klass, order)
-    key, mode = begin
+    key, mode = (
       case order
       when Hash
         raise ArSerializer::InvalidQuery, 'invalid order' unless order.size == 1
@@ -182,10 +183,10 @@ class ArSerializer::Field
       when NilClass
         [klass.primary_key, :asc]
       end
-    end
+    )
     info = klass._serializer_field_info(key)
-    key = info&.order_column || key.to_s.underscore
-    raise ArSerializer::InvalidQuery, "unpermitted order key: #{key}" unless klass.primary_key == key.to_s || (klass.has_attribute?(key) && info)
+    key = (info&.order_column || key).to_s.underscore.to_sym
+    raise ArSerializer::InvalidQuery, "unpermitted order key: #{key}" unless key.to_s == klass.primary_key || info&.orderable
     raise ArSerializer::InvalidQuery, "invalid order mode: #{mode.inspect}" unless [:asc, :desc, 'asc', 'desc'].include? mode
     [key.to_sym, mode.to_sym]
   end

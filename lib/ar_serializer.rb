@@ -18,30 +18,19 @@ module ArSerializer::Serializable
     end
 
     def _serializer_field_info(name)
-      namespaces = ArSerializer::Serializer.current_namespaces
-      if namespaces
-        Array(namespaces).each do |ns|
-          field = _serializer_namespace(ns)[name.to_s]
-          return field if field
-        end
+      ArSerializer::Serializer.current_namespaces.each do |ns|
+        field = _serializer_namespace(ns)[name.to_s]
+        return field if field
       end
-      field = _serializer_namespace(nil)[name.to_s]
-      if field
-        field
-      elsif superclass < ArSerializer::Serializable
-        superclass._serializer_field_info name
-      end
+      superclass._serializer_field_info name if superclass < ArSerializer::Serializable
     end
 
     def _serializer_field_keys
       namespaces = ArSerializer::Serializer.current_namespaces
       keys = []
-      if namespaces
-        Array(namespaces).each do |ns|
-          keys |= _serializer_namespace(ns).keys
-        end
+      ArSerializer::Serializer.current_namespaces.each do |ns|
+        keys |= _serializer_namespace(ns).keys
       end
-      keys |= _serializer_namespace(nil).keys
       keys |= superclass._serializer_field_keys if superclass < ArSerializer::Serializable
       keys
     end

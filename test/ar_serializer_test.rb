@@ -254,6 +254,24 @@ class ArSerializerTest < Minitest::Test
     end
   end
 
+  def test_reject_unorderable_key_ordering
+    post_class = Class.new ActiveRecord::Base do
+      self.table_name = :posts
+      serializer_field :title
+      serializer_field :body, orderable: false
+    end
+    user_class = Class.new ActiveRecord::Base do
+      self.table_name = :users
+      has_many :posts, anonymous_class: post_class, foreign_key: :user_id
+      serializer_field :posts
+    end
+    assert ArSerializer.serialize(user_class.all, posts: [:title, :body, params: { order: { title: :asc } }])
+    assert_raises(ArSerializer::InvalidQuery) do
+      ArSerializer.serialize user_class.all, posts: [:title, :body, params: { order: { body: :asc } }]
+    end
+  end
+
+
   def test_subclasses
     klass = Class.new User do
       self.table_name = :users
