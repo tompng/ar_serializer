@@ -106,7 +106,7 @@ class ArSerializer::Field
   def self.type_from_attribute_type(klass, name)
     attr_type = klass.attribute_types[name]
     if attr_type.is_a?(ActiveRecord::Enum::EnumType) && klass.respond_to?(name.pluralize)
-      values = klass.send(name.pluralize).keys.compact
+      values = klass.__send__(name.pluralize).keys.compact
       values = values.map { |v| v.is_a?(Symbol) ? v.to_s : v }.uniq
       valid_classes = [TrueClass, FalseClass, String, Integer, Float]
       return if values.empty? || (values.map(&:class) - valid_classes).present?
@@ -178,7 +178,7 @@ class ArSerializer::Field
       klass,
       name,
       includes: includes, preloaders: preloaders, only: only, except: except, order_column: order_column, orderable: orderable, type: type, params_type: params_type,
-      data_block: data_block || ->(_context, **_params) { send underscore_name }
+      data_block: data_block || ->(_context, **_params) { __send__ underscore_name }
     )
   end
 
@@ -228,7 +228,7 @@ class ArSerializer::Field
       end
     end
     data_block = lambda do |preloaded, _context, **_params|
-      preloaded ? preloaded[id] || [] : send(underscore_name)
+      preloaded ? preloaded[id] || [] : __send__(underscore_name)
     end
     new klass, name, preloaders: [preloader], data_block: data_block, only: only, except: except, type: type, params_type: params_type, orderable: false
   end
@@ -240,7 +240,7 @@ class ArSerializer::Field
     ActiveRecord::Associations::Preloader.new.preload models, name
     return if order.nil?
     models.map do |model|
-      records_nonnils, records_nils = model.send(name).partition(&order_key)
+      records_nonnils, records_nils = model.__send__(name).partition(&order_key)
       records = records_nils.sort_by(&:id) + records_nonnils.sort_by { |r| [r[order_key], r.id] }
       records.reverse! if order_mode == :desc
       [model.id, records]
