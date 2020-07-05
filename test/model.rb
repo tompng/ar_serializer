@@ -75,11 +75,11 @@ class Comment < ActiveRecord::Base
   serializer_field :stars_count, count_of: :stars
   serializer_field :star
 
-  define_preloader :star_count_loader do |comments|
+  star_count_loader = ->(comments) do
     Star.where(comment_id: comments.map(&:id)).group(:comment_id).count
   end
 
-  serializer_field :stars_count_x5, type: :int, preload: :star_count_loader do |preloaded|
+  serializer_field :stars_count_x5, type: :int, preload: star_count_loader do |preloaded|
     (preloaded[id] || 0) * 5
   end
 

@@ -54,14 +54,6 @@ module ArSerializer::Serializable
       end
     end
 
-    def _custom_preloaders
-      @_custom_preloaders ||= {}
-    end
-
-    def define_preloader(name, &block)
-      _custom_preloaders[name] = block
-    end
-
     def serializer_permission(**args, &data_block)
       serializer_field(:permission, **args, private: true, &data_block)
     end
