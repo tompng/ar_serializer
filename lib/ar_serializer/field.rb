@@ -78,10 +78,11 @@ class ArSerializer::Field
     end
     return :any if any && arguments.empty?
     arguments.map do |key, req|
-      type = key.to_s.match?(/^(.+_)?id|Id$/) ? :int : :any
+      type = key.to_s.match?(/^(.+_)?id$/) ? :int : :any
+      camelcase = key.to_s.camelcase :lower
       name = key.to_s.underscore
       type = [type] if name.singularize.pluralize == name
-      [req ? key : "#{key}?", type]
+      [req ? camelcase : "#{camelcase}?", type]
     end.to_h
   end
 
@@ -223,7 +224,10 @@ class ArSerializer::Field
         modes = %w[asc desc]
         {
           limit?: :int,
-          order?: orderable_keys.map { |key| { key => modes } } +  modes
+          order?: [
+            { key?: orderable_keys.size == 1 ? orderable_keys.first : orderable_keys, mode?: modes },
+            *modes
+          ]
         }
       }
       data_block = lambda do |preloaded, _context, **_params|
