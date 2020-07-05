@@ -71,10 +71,10 @@ end
 
 # preloader
 class Foo < ActiveRecord::Base
-  define_preloader :bar_count_loader do |models|
+  bar_count_loader = ->(models) do
     Bar.where(foo_id: models.map(&:id)).group(:foo_id).count
   end
-  serializer_field :bar_count, preload: preloader_name_or_proc do |preloaded|
+  serializer_field :bar_count, preload: bar_count_loader do |preloaded|
     preloaded[id] || 0
   end
   # data_blockが `do |preloaded| preloaded[id] end` の場合は省略可能

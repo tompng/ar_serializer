@@ -167,13 +167,7 @@ class ArSerializer::Field
   def self.custom_field(klass, name, includes:, preload:, only:, except:, private:, scoped_access:, order_column:, orderable:, type:, params_type:, &data_block)
     underscore_name = name.underscore
     if preload
-      preloaders = Array(preload).map do |preloader|
-        next preloader if preloader.is_a? Proc
-        unless klass._custom_preloaders.has_key?(preloader)
-          raise ArgumentError, "preloader not found: #{preloader}"
-        end
-        klass._custom_preloaders[preloader]
-      end
+      preloaders = [*preload]
     else
       preloaders = []
       includes ||= underscore_name if klass.respond_to?(:reflect_on_association) && klass.reflect_on_association(underscore_name)
