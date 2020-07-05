@@ -187,15 +187,19 @@ class ArSerializer::Field
     key, mode = (
       case order
       when Hash
-        raise ArSerializer::InvalidQuery, 'invalid order' unless order.size == 1
-        order.first.map(&:to_sym)
+        extra_keys = order.keys.map(&:to_s) - %w[key mode]
+        raise ArSerializer::InvalidQuery, "invalid order option #{extra_keys}" unless extra_keys.empty?
+        [
+          (order['key'] || order[:key] || primary_key).to_sym,
+          (order['mode'] || order[:mode] || :asc).to_sym
+        ]
       when Symbol, 'asc', 'desc'
         [primary_key, order.to_sym]
       when NilClass
         [primary_key, :asc]
       end
     )
-    info = klass._serializer_field_info(key)
+    info = klass._serializer_field_info key
     order_key = (info&.order_column || key).to_s.underscore.to_sym
     raise ArSerializer::InvalidQuery, "invalid order mode: #{mode.inspect}" unless [:asc, :desc].include? mode
     raise ArSerializer::InvalidQuery, "unpermitted order key: #{key}" unless key == primary_key || (info&.orderable? && (!only || only.include?(key)) && !except&.include?(key))

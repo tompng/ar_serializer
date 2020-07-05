@@ -218,7 +218,7 @@ class ArSerializerTest < Minitest::Test
   def test_association_params
     user = Comment.first.post.user
     expected = { posts: user.posts.map { |p| { comments: p.comments.order(body: :asc).limit(1).map { |c| { id: c.id } } } } }
-    query = { posts: { comments: [:id, params: { limit: 1, order: { body: :asc } }] } }
+    query = { posts: { comments: [:id, params: { limit: 1, order: { key: :body, mode: :asc } }] } }
     data = ArSerializer.serialize user, query
     assert_equal expected, data
     data2 = ArSerializer.serialize user, JSON.parse(query.to_json)
@@ -229,7 +229,7 @@ class ArSerializerTest < Minitest::Test
     query = {
       posts: [
         :id,
-        params: { order: { created_at: :desc }}
+        params: { order: { key: :created_at, mode: :desc }}
       ]
     }
     ArSerializer.serialize User.all, query, use: :aaa
@@ -251,12 +251,12 @@ class ArSerializerTest < Minitest::Test
     [
       [:name, posts: :title],
       [:name, posts: [:title, params: { order: :desc }]],
-      [:name, posts: [:title, params: { order: { id: :asc } }]]
+      [:name, posts: [:title, params: { order: { key: :id, mode: :asc } }]]
     ].each do |query|
       assert ArSerializer.serialize(user_class.all, query)
     end
     assert_raises(ArSerializer::InvalidQuery) do
-      query = [:name, posts: [:title, params: { order: { body: :asc } }]]
+      query = [:name, posts: [:title, params: { order: { key: :body, mode: :asc } }]]
       ArSerializer.serialize user_class.all, query
     end
   end
@@ -274,18 +274,18 @@ class ArSerializerTest < Minitest::Test
       serializer_field :postsExceptCreatedAt, association: :posts, only: [:title, :body]
       serializer_field :postsOnlyTitle, association: :posts, only: :title
     end
-    assert ArSerializer.serialize(user_class.all, { posts: [:title, :body, params: { order: { title: :asc } }] })
-    assert ArSerializer.serialize(user_class.all, { posts: [:title, params: { order: { createdAt: :asc } }] })
-    assert ArSerializer.serialize(user_class.all, { postsExceptCreatedAt: [:title, params: { order: { title: :asc } }] })
-    assert ArSerializer.serialize(user_class.all, { postsOnlyTitle: [:title, params: { order: { title: :asc } }] })
+    assert ArSerializer.serialize(user_class.all, { posts: [:title, :body, params: { order: { key: :title, mode: :asc } }] })
+    assert ArSerializer.serialize(user_class.all, { posts: [:title, params: { order: { key: :createdAt, mode: :asc } }] })
+    assert ArSerializer.serialize(user_class.all, { postsExceptCreatedAt: [:title, params: { order: { key: :title, mode: :asc } }] })
+    assert ArSerializer.serialize(user_class.all, { postsOnlyTitle: [:title, params: { order: { key: :title, mode: :asc } }] })
     assert_raises(ArSerializer::InvalidQuery) do
-      ArSerializer.serialize user_class.all, { posts: [:title, :body, params: { order: { body: :asc } }] }
+      ArSerializer.serialize user_class.all, { posts: [:title, :body, params: { order: { key: :body, mode: :asc } }] }
     end
     assert_raises(ArSerializer::InvalidQuery) do
-      ArSerializer.serialize user_class.all, { postsExceptCreatedAt: [:title, params: { order: { createdAt: :asc } }] }
+      ArSerializer.serialize user_class.all, { postsExceptCreatedAt: [:title, params: { order: { key: :createdAt, mode: :asc } }] }
     end
     assert_raises(ArSerializer::InvalidQuery) do
-      ArSerializer.serialize user_class.all, { postsOnlyTitle: [:title, params: { order: { body: :asc } }] }
+      ArSerializer.serialize user_class.all, { postsOnlyTitle: [:title, params: { order: { key: :body, mode: :asc } }] }
     end
   end
 
@@ -347,7 +347,7 @@ class ArSerializerTest < Minitest::Test
       get_target_ids = lambda do
         ArSerializer.serialize(
           user.reload,
-          { posts: [:id, field, params: { order: { field => :asc } }] }
+          { posts: [:id, field, params: { order: { key: field, mode: :asc } }] }
         )[:posts].map { |post| post[:id] }
       end
       user.posts.each do |post|
