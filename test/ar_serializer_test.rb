@@ -485,7 +485,7 @@ class ArSerializerTest < Minitest::Test
 
   def test_field_permission
     ns = __method__
-    permission = ->(user) { self == user }
+    permission = ->(user, **kw) { self == user }
     User.serializer_field(:email1, permission: permission, namespace: ns) { :email1 }
     User.serializer_field(:email2, permission: permission, fallback: 'no_email', namespace: ns) { :email2 }
     User.serializer_field(:email3, permission: permission, fallback: ->{ 'no_email' }, namespace: ns) { :email3 }
@@ -501,7 +501,7 @@ class ArSerializerTest < Minitest::Test
 
   def test_count_field_permission
     ns = __method__
-    Comment.serializer_field :a, count_of: :stars, permission: ->(ctx) { id.odd? }, namespace: ns
+    Comment.serializer_field :a, count_of: :stars, permission: ->(ctx, **kw) { id.odd? }, namespace: ns
     result = ArSerializer.serialize Comment.all, [:id, :stars_count, :a], use: ns
     odds, evens = result.partition { |r| r[:id].odd? }
     assert odds.size >= 1 && odds.all? { |c| c[:a] == c[:stars_count] }
