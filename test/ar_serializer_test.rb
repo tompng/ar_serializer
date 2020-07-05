@@ -433,6 +433,31 @@ class ArSerializerTest < Minitest::Test
     assert_equal Comment.where('user_id % 2 = 1').count, comments.size
   end
 
+  def test_permission_toggle
+    ns = :test_permissoin_toggle
+    User.serializer_permission(namespace: ns) { id.odd? }
+    User.serializer_field(:id_even?, private: true, namespace: ns) { id.even? }
+    Comment.serializer_permission(namespace: ns) { id.odd? }
+    Comment.serializer_field(:id_even?, private: true, namespace: ns) { id.even? }
+    Post.serializer_field :evenUser, association: :user, scoped_access: :id_even?, namespace: ns
+    Post.serializer_field :allUser, association: :user, scoped_access: :false, namespace: ns
+    Post.serializer_field :evenComments, association: :comments, scoped_access: :id_even?, namespace: ns
+    Post.serializer_field :allComments, association: :comments, scoped_access: :false, namespace: ns
+    query = { comments: :id, evenComments: :id, allComments: :id, user: :id, allUser: :id, evenUser: :id }
+    posts = ArSerializer.serialize Post.all, query, use: ns
+    assert posts.map { |p| p[:user]&.[] :id }.compact.all?(&:odd?)
+    assert posts.map { |p| p[:evenUser]&.[] :id }.compact.all?(&:even?)
+    all_user_ids = posts.map { |p| p[:allUser][:id] }
+    assert all_user_ids.any?(&:odd?)
+    assert all_user_ids.any?(&:even?)
+    assert posts.flat_map { |p| p[:comments].map { |c| c[:id] } }.all?(&:odd?)
+    assert posts.flat_map { |p| p[:evenComments].map { |c| c[:id] } }.all?(&:even?)
+    all_comment_ids = posts.flat_map { |p| p[:allComments].map { |c| c[:id] } }
+    assert all_comment_ids.any?(&:odd?)
+    assert all_comment_ids.any?(&:even?)
+  end
+
+
   def test_permission_preloader
     ns = :test_permission_preloader
     p1_count = 0
