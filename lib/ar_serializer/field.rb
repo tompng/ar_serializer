@@ -2,14 +2,16 @@ require 'ar_serializer/error'
 require 'top_n_loader'
 
 class ArSerializer::Field
-  attr_reader :includes, :preloaders, :data_block, :only, :except, :order_column
-  def initialize klass, name, includes: nil, preloaders: [], data_block:, only: nil, except: nil, order_column: nil, orderable: nil, type: nil, params_type: nil
+  attr_reader :includes, :preloaders, :data_block, :only, :except, :scoped_access, :order_column
+  def initialize klass, name, includes: nil, preloaders: [], data_block:, only: nil, except: nil, private: false, scoped_access: nil, order_column: nil, orderable: nil, type: nil, params_type: nil
     @klass = klass
     @name = name
     @includes = includes
     @preloaders = preloaders
     @only = only && [*only].map(&:to_s)
     @except = except && [*except].map(&:to_s)
+    @private = private
+    @scoped_access = scoped_access.nil? ? true : scoped_access
     @data_block = data_block
     @order_column = order_column
     @orderable = orderable
@@ -20,6 +22,10 @@ class ArSerializer::Field
   def orderable?
     return @orderable unless @orderable.nil?
     @orderable = @klass.has_attribute? (@order_column || @name).to_s.underscore
+  end
+
+  def private?
+    @private
   end
 
   def type
@@ -127,10 +133,10 @@ class ArSerializer::Field
     }[attr_type.type]
   end
 
-  def self.create(klass, name, type: nil, params_type: nil, count_of: nil, includes: nil, preload: nil, only: nil, except: nil, order_column: nil, orderable: nil, &data_block)
+  def self.create(klass, name, type: nil, params_type: nil, count_of: nil, includes: nil, preload: nil, only: nil, except: nil, private: nil, scoped_access: nil, order_column: nil, orderable: nil, &data_block)
     name = name.to_s
     if count_of
-      if includes || preload || data_block || only || except || order_column || orderable
+      if includes || preload || data_block || only || except || order_column || orderable || scoped_access != nil
         raise ArgumentError, 'wrong options for count_of field'
       end
       return count_field klass, name, count_of
@@ -144,7 +150,7 @@ class ArSerializer::Field
       else
         type ||= -> { association.klass }
       end
-      return association_field klass, name, only: only, except: except, type: type, collection: association.collection? if !includes && !preload && !data_block && !params_type
+      return association_field klass, name, only: only, except: except, scoped_access: scoped_access, type: type, collection: association.collection? if !includes && !preload && !data_block && !params_type
     end
     type ||= lambda do
       if klass.respond_to? :column_for_attribute
@@ -155,10 +161,10 @@ class ArSerializer::Field
         :any
       end
     end
-    custom_field klass, name, includes: includes, preload: preload, only: only, except: except, order_column: order_column, orderable: orderable, type: type, params_type: params_type, &data_block
+    custom_field klass, name, includes: includes, preload: preload, only: only, except: except, private: private, scoped_access: scoped_access, order_column: order_column, orderable: orderable, type: type, params_type: params_type, &data_block
   end
 
-  def self.custom_field(klass, name, includes:, preload:, only:, except:, order_column:, orderable:, type:, params_type:, &data_block)
+  def self.custom_field(klass, name, includes:, preload:, only:, except:, private:, scoped_access:, order_column:, orderable:, type:, params_type:, &data_block)
     underscore_name = name.underscore
     if preload
       preloaders = Array(preload).map do |preloader|
@@ -177,7 +183,7 @@ class ArSerializer::Field
     new(
       klass,
       name,
-      includes: includes, preloaders: preloaders, only: only, except: except, order_column: order_column, orderable: orderable, type: type, params_type: params_type,
+      includes: includes, preloaders: preloaders, only: only, except: except, private: private, scoped_access: scoped_access, order_column: order_column, orderable: orderable, type: type, params_type: params_type,
       data_block: data_block || ->(_context, **_params) { __send__ underscore_name }
     )
   end
@@ -202,7 +208,7 @@ class ArSerializer::Field
     [order_key, mode]
   end
 
-  def self.association_field(klass, name, only:, except:, type:, collection:)
+  def self.association_field(klass, name, only:, except:, scoped_access: nil, type:, collection:)
     underscore_name = name.underscore
     only = [*only] if only
     except = [*except] if except
@@ -222,15 +228,18 @@ class ArSerializer::Field
           order?: orderable_keys.map { |key| { key => modes } } +  modes
         }
       }
+      data_block = lambda do |preloaded, _context, **_params|
+        preloaded ? preloaded[id] || [] : __send__(underscore_name)
+      end
     else
       preloader = lambda do |models, _context, **_params|
         preload_association klass, models, underscore_name
       end
+      data_block = lambda do |preloaded, _context, **_params|
+        preloaded ? preloaded[id] : __send__(underscore_name)
+      end
     end
-    data_block = lambda do |preloaded, _context, **_params|
-      preloaded ? preloaded[id] || [] : __send__(underscore_name)
-    end
-    new klass, name, preloaders: [preloader], data_block: data_block, only: only, except: except, type: type, params_type: params_type, orderable: false
+    new klass, name, preloaders: [preloader], data_block: data_block, only: only, except: except, scoped_access: scoped_access, type: type, params_type: params_type, orderable: false
   end
 
   def self.preload_association(klass, models, name, limit: nil, order: nil, only: nil, except: nil)
@@ -238,7 +247,7 @@ class ArSerializer::Field
     order_key, order_mode = parse_order klass.reflect_on_association(name).klass, order, only: only, except: except
     return TopNLoader.load_associations klass, models.map(&:id), name, limit: limit, order: { order_key => order_mode } if limit
     ActiveRecord::Associations::Preloader.new.preload models, name
-    return if order.nil?
+    return models.map { |m| [m.id, m.__send__(name)] }.to_h if order.nil?
     models.map do |model|
       records_nonnils, records_nils = model.__send__(name).partition(&order_key)
       records = records_nils.sort_by(&:id) + records_nonnils.sort_by { |r| [r[order_key], r.id] }

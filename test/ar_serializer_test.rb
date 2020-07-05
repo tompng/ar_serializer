@@ -50,6 +50,13 @@ class ArSerializerTest < Minitest::Test
     assert_equal expected, ArSerializer.serialize(user, [:name, posts: :title])
   end
 
+  def test_child_nil
+    post = Post.first
+    post.user = nil
+    expected = { user: nil }
+    assert_equal expected, ArSerializer.serialize(post, :user)
+  end
+
   def test_context
     star = Star.first
     user = star.user
@@ -282,7 +289,6 @@ class ArSerializerTest < Minitest::Test
     end
   end
 
-
   def test_subclasses
     klass = Class.new User do
       self.table_name = :users
@@ -402,6 +408,80 @@ class ArSerializerTest < Minitest::Test
     assert_equal ArSerializer.serialize(obj, :id), { id: 1 }
     assert_equal ArSerializer.serialize(obj, :id, use: :foo), { id: 1, bar: 2, baz: 3 }
     assert_equal ArSerializer.serialize(obj, :*, use: :foo), { id: 1, name: 'name', bar: 2, baz: 3 }
+    assert_raises(ArSerializer::InvalidQuery) { ArSerializer.serialize obj, :defaults }
+  end
+
+  def test_has_one_permission
+    ns = :test_has_one_permission
+    User.serializer_permission(namespace: ns) { id.odd? }
+    Comment.serializer_field :userId, namespace: ns
+    query = { comments: [:userId, :user] }
+    result = ArSerializer.serialize Post.all, query, use: ns
+    comments = result.flat_map { |p| p[:comments] }
+    assert comments.any? { |c| c[:userId].odd? }
+    assert comments.any? { |c| c[:userId].even? }
+    assert comments.all? { |c| c[:userId].odd? == !!c[:user] }
+  end
+
+  def test_has_many_permission
+    ns = :test_has_many_permission
+    Comment.serializer_permission(namespace: ns) { user_id.odd? }
+    query = { posts: { comments: { user: :id } } }
+    result = ArSerializer.serialize User.all, query, use: ns
+    comments = result.map { |u| u[:posts].map { |p| p[:comments] } }.flatten
+    assert comments.all? { |c| c[:user][:id].odd? }
+    assert_equal Comment.where('user_id % 2 = 1').count, comments.size
+  end
+
+  def test_permission_toggle
+    ns = :test_permissoin_toggle
+    User.serializer_permission(namespace: ns) { id.odd? }
+    User.serializer_field(:id_even?, private: true, namespace: ns) { id.even? }
+    Comment.serializer_permission(namespace: ns) { id.odd? }
+    Comment.serializer_field(:id_even?, private: true, namespace: ns) { id.even? }
+    Post.serializer_field :evenUser, association: :user, scoped_access: :id_even?, namespace: ns
+    Post.serializer_field :allUser, association: :user, scoped_access: :false, namespace: ns
+    Post.serializer_field :evenComments, association: :comments, scoped_access: :id_even?, namespace: ns
+    Post.serializer_field :allComments, association: :comments, scoped_access: :false, namespace: ns
+    query = { comments: :id, evenComments: :id, allComments: :id, user: :id, allUser: :id, evenUser: :id }
+    posts = ArSerializer.serialize Post.all, query, use: ns
+    assert posts.map { |p| p[:user]&.[] :id }.compact.all?(&:odd?)
+    assert posts.map { |p| p[:evenUser]&.[] :id }.compact.all?(&:even?)
+    all_user_ids = posts.map { |p| p[:allUser][:id] }
+    assert all_user_ids.any?(&:odd?)
+    assert all_user_ids.any?(&:even?)
+    assert posts.flat_map { |p| p[:comments].map { |c| c[:id] } }.all?(&:odd?)
+    assert posts.flat_map { |p| p[:evenComments].map { |c| c[:id] } }.all?(&:even?)
+    all_comment_ids = posts.flat_map { |p| p[:allComments].map { |c| c[:id] } }
+    assert all_comment_ids.any?(&:odd?)
+    assert all_comment_ids.any?(&:even?)
+  end
+
+
+  def test_permission_preloader
+    ns = :test_permission_preloader
+    p1_count = 0
+    p2_count = 0
+    p3_count = 0
+    preloader1 = ->(users) { p1_count += 1; [:p1, users.size] }
+    preloader2 = ->(users) { p2_count += 1; [:p2, users.size] }
+    preloader3 = ->(users) { p3_count += 1; [:p3, users.size] }
+    commented_users_count = Comment.distinct.count(:user_id)
+    User.serializer_permission namespace: ns, preload: [preloader1, preloader2] do |p1, p2|
+      raise unless p1 == [:p1, commented_users_count]
+      raise unless p2 == [:p2, commented_users_count]
+      id.odd?
+    end
+    User.serializer_field :test, namespace: ns, preload: [preloader2, preloader3] do |p2, p3|
+      p2 + p3
+    end
+    query = { user: [:id, :test] }
+    comments = ArSerializer.serialize Comment.all, query, use: ns
+    users = comments.map { |c| c[:user] }.compact
+    assert users.any?
+    assert commented_users_count != users.size
+    assert_equal [:p2, commented_users_count, :p3, users.uniq.size], users[0][:test]
+    assert_equal [1, 1, 1], [p1_count, p2_count, p3_count]
   end
 
   def test_schema

@@ -25,11 +25,16 @@ module ArSerializer::Serializable
       superclass._serializer_field_info name if superclass < ArSerializer::Serializable
     end
 
-    def _serializer_field_keys
+    def _serializer_field_keys(public_only = true)
       keys = ArSerializer::Serializer.current_namespaces.map do |ns|
-        _serializer_namespace(ns).keys
+        if public_only
+          fields = _serializer_namespace(ns)
+          fields.keys.reject { |key| fields[key].private? }
+        else
+          _serializer_namespace(ns).keys
+        end
       end.inject(:|)
-      keys |= superclass._serializer_field_keys if superclass < ArSerializer::Serializable
+      keys |= superclass._serializer_field_keys(public_only) if superclass < ArSerializer::Serializable
       keys
     end
 
@@ -57,14 +62,18 @@ module ArSerializer::Serializable
       _custom_preloaders[name] = block
     end
 
+    def serializer_permission(**args, &data_block)
+      serializer_field(:permission, **args, private: true, &data_block)
+    end
+
     def serializer_defaults(**args, &block)
-      serializer_field :defaults, **args, &block
+      serializer_field(:defaults, **args, private: true, &block)
     end
   end
 end
 
 ActiveRecord::Base.include ArSerializer::Serializable
-ActiveRecord::Relation.include ArSerializer::ArrayLikeCompositeValue
+ActiveRecord::Relation.include ArSerializer::ArrayLikeSerializable
 
 require 'ar_serializer/graphql'
 require 'ar_serializer/type_script'
