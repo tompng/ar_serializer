@@ -19,7 +19,7 @@ class ArSerializer::Field
 
   def orderable?
     return @orderable unless @orderable.nil?
-    @orderable = @klass.has_attribute?(@order_column || @name).to_s.underscore
+    @orderable = @klass.has_attribute? (@order_column || @name).to_s.underscore
   end
 
   def type
