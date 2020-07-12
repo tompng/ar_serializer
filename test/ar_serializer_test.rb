@@ -397,6 +397,22 @@ class ArSerializerTest < Minitest::Test
     assert(output.any? { |user| user[:favorite_post] && user[:favorite_post][:post][:id] })
   end
 
+  def test_child_of_new_records
+    klass = Class.new do
+      include ArSerializer::Serializable
+      def initialize(user); @user = user; end
+      serializer_field(:user) { @user }
+    end
+    users = User.limit(3)
+    objects = users.map { |u| klass.new u }
+    posts = users.map { |u| Post.new user: u }
+    result1 = ArSerializer.serialize objects, { user: :id }
+    result2 = ArSerializer.serialize posts, { user: :id }
+    expected = users.map { |u| { user: { id: u.id } } }
+    assert_equal expected, result1
+    assert_equal expected, result2
+  end
+
   def test_defaults
     klass = Class.new do
       include ArSerializer::Serializable

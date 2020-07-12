@@ -233,14 +233,14 @@ class ArSerializer::Field
         }
       }
       data_block = lambda do |preloaded, _context, **_params|
-        preloaded ? preloaded[id] || [] : __send__(underscore_name)
+        preloaded ? preloaded[id || self] || [] : __send__(underscore_name)
       end
     else
       preloader = lambda do |models, _context, **_params|
         preload_association klass, models, underscore_name
       end
       data_block = lambda do |preloaded, _context, **_params|
-        preloaded ? preloaded[id] : __send__(underscore_name)
+        preloaded ? preloaded[id || self] : __send__(underscore_name)
       end
     end
     new klass, name, preloaders: [preloader], data_block: data_block, only: only, except: except, scoped_access: scoped_access, permission: permission, fallback: fallback, type: type, params_type: params_type, orderable: false
@@ -251,12 +251,12 @@ class ArSerializer::Field
     order_key, order_mode = parse_order klass.reflect_on_association(name).klass, order, only: only, except: except
     return TopNLoader.load_associations klass, models.map(&:id), name, limit: limit, order: { order_key => order_mode } if limit
     ActiveRecord::Associations::Preloader.new.preload models, name
-    return models.map { |m| [m.id, m.__send__(name)] }.to_h if order.nil?
+    return models.map { |m| [m.id || m, m.__send__(name)] }.to_h if order.nil?
     models.map do |model|
       records_nonnils, records_nils = model.__send__(name).partition(&order_key)
       records = records_nils.sort_by(&:id) + records_nonnils.sort_by { |r| [r[order_key], r.id] }
       records.reverse! if order_mode == :desc
-      [model.id, records]
+      [model.id || model, records]
     end.to_h
   end
 end
