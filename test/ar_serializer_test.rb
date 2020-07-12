@@ -57,6 +57,22 @@ class ArSerializerTest < Minitest::Test
     assert_equal expected, ArSerializer.serialize(post, :user)
   end
 
+  def test_children_including_nil
+    u1, u2 = User.limit 2
+    klass = Class.new do
+      include ArSerializer::Serializable
+      serializer_field(:userOrNils) { [u1, nil, u2] }
+    end
+    result = ArSerializer.serialize klass.new, { userOrNils: :id }
+    expected = { userOrNils: [{ id: u1.id }, nil, { id: u2.id }] }
+    assert_equal expected, result
+  end
+
+  def test_serializing_nil
+    result = ArSerializer.serialize nil, :id
+    assert_equal nil, result
+  end
+
   def test_context
     star = Star.first
     user = star.user
