@@ -29,6 +29,7 @@ module ArSerializer::Serializer
   end
 
   def self.serialize(model, query, context: nil, use: nil, permission: true)
+    return nil if model.nil?
     with_namespaces use do
       attributes = parse_args(query)[:attributes]
       if model.is_a?(ArSerializer::Serializable)
