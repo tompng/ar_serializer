@@ -188,12 +188,18 @@ class ArSerializer::Field
     key, mode = (
       case order
       when Hash
-        extra_keys = order.keys.map(&:to_s) - %w[key mode]
-        raise ArSerializer::InvalidQuery, "invalid order option #{extra_keys}" unless extra_keys.empty?
-        [
-          (order['key'] || order[:key] || primary_key).to_sym,
-          (order['mode'] || order[:mode] || :asc).to_sym
-        ]
+        keys = order.keys.map(&:to_s)
+        if keys.size == 1 && keys != ['mode'] && %w[asc desc].include?(order.values.first.to_s)
+          # deprecated. { key => asc_or_desc }
+          [keys.first.camelize(:lower).to_sym, order.values.first.to_sym]
+        else
+          extra_keys = keys - %w[key mode]
+          raise ArSerializer::InvalidQuery, "invalid order option #{extra_keys}" unless extra_keys.empty?
+          [
+            (order['key'] || order[:key] || primary_key).to_sym,
+            (order['mode'] || order[:mode] || :asc).to_sym
+          ]
+        end
       when Symbol, 'asc', 'desc'
         [primary_key, order.to_sym]
       when NilClass

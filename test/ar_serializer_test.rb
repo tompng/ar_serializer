@@ -261,6 +261,28 @@ class ArSerializerTest < Minitest::Test
     end
   end
 
+  def test_accept_deprecated_ordering
+    ns = __method__
+    Comment.serializer_field :updatedAt, namespace: ns
+    post_id, _size = Comment.group(:post_id).count.max_by(&:last)
+    post = Post.find post_id
+    post_query = ->(params) { { comments: { attributes: :id, params: params } } }
+    normal_query = ->(mode) { post_query.call({ order: { key: :updatedAt, mode: mode } }) }
+    deprecated_query1 = ->(mode) { post_query.call({ order: { updatedAt: mode } }) }
+    deprecated_query2 = ->(mode) { post_query.call({ order: { updated_at: mode } }) }
+    n_asc = ArSerializer.serialize post, normal_query.call(:asc), use: ns
+    n_desc = ArSerializer.serialize post, normal_query.call(:desc), use: ns
+    d_asc1 = ArSerializer.serialize post, deprecated_query1.call(:asc), use: ns
+    d_desc1 = ArSerializer.serialize post, deprecated_query1.call(:desc), use: ns
+    d_asc2 = ArSerializer.serialize post, deprecated_query2.call(:asc), use: ns
+    d_desc2 = ArSerializer.serialize post, deprecated_query2.call(:desc), use: ns
+    assert n_asc != n_desc
+    assert_equal n_asc, d_asc1
+    assert_equal n_desc, d_desc1
+    assert_equal n_asc, d_asc2
+    assert_equal n_desc, d_desc2
+  end
+
   def test_reject_unorderable_key_ordering
     post_class = Class.new ActiveRecord::Base do
       self.table_name = :posts
