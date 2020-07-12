@@ -493,9 +493,10 @@ class ArSerializerTest < Minitest::Test
     b = { email1: nil, email3: 'no_email', email2: 'no_email' }
     query = [:email1, :email2, :email3]
     users = [User.first, User.second, User.third]
-    result1 = ArSerializer.serialize users, query, context: User.third, use: ns
+    users.each { |u| u.posts.create! }
+    result1 = ArSerializer.serialize users, query, context: users.third, use: ns
     assert_equal [b, b, a], result1
-    result2 = ArSerializer.serialize users.map { |u| u.posts.first }, { user: query }, context: User.second, use: ns
+    result2 = ArSerializer.serialize users.map { |u| u.posts.first }, { user: query }, context: users.second, use: ns
     assert_equal [{ user: b }, { user: a }, { user: b}], result2
   end
 
