@@ -261,6 +261,28 @@ class ArSerializerTest < Minitest::Test
     end
   end
 
+  def test_params_underscore
+    klass = Class.new do
+      include ArSerializer::Serializable
+      serializer_field(:p) { |**params| params }
+      serializer_field(:self) { self }
+    end
+    query = {
+      p: { params: { 'a_b' => { c_d: 2, 'eF' => 3 }, gH: { 'i_j' => 4, kL: 5 } } },
+      self: {
+        p: { params: { 'a_b_c' => 1, 'ddEeFf' => 2 } }
+      }
+    }
+    result = ArSerializer.serialize klass.new, query
+    expected = {
+      p: { a_b: { c_d: 2, e_f: 3 }, g_h: { i_j: 4, k_l: 5 } },
+      self: {
+        p: { a_b_c: 1, dd_ee_ff: 2 }
+      }
+    }
+    assert_equal expected, result
+  end
+
   def test_accept_deprecated_ordering
     ns = __method__
     Comment.serializer_field :updatedAt, namespace: ns
