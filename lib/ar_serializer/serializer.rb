@@ -186,13 +186,13 @@ module ArSerializer::Serializer
     output_for_model
   end
 
-  def self.deep_with_indifferent_access params
+  def self.deep_underscore_keys params
     case params
     when Array
-      params.map { |v| deep_with_indifferent_access v }
+      params.map { |v| deep_underscore_keys v }
     when Hash
-      params.transform_keys(&:to_sym).transform_values! do |v|
-        deep_with_indifferent_access v
+      params.transform_keys { |k| k.to_s.underscore.to_sym }.transform_values! do |v|
+        deep_underscore_keys v
       end
     else
       params
@@ -217,7 +217,7 @@ module ArSerializer::Serializer
           elsif !only_attributes && %i[attributes query].include?(sym_key)
             attributes.concat parse_args(value, only_attributes: true)
           elsif !only_attributes && sym_key == :params
-            params = deep_with_indifferent_access value
+            params = deep_underscore_keys value
           else
             attributes << [sym_key, value == true ? {} : parse_args(value)]
           end

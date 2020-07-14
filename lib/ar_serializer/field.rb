@@ -80,10 +80,11 @@ class ArSerializer::Field
     end
     return :any if any && arguments.empty?
     arguments.map do |key, req|
-      type = key.to_s.match?(/^(.+_)?id|Id$/) ? :int : :any
+      type = key.to_s.match?(/^(.+_)?id$/) ? :int : :any
+      camelcase = key.to_s.camelcase :lower
       name = key.to_s.underscore
       type = [type] if name.singularize.pluralize == name
-      [req ? key : "#{key}?", type]
+      [req ? camelcase : "#{camelcase}?", type]
     end.to_h
   end
 
@@ -192,24 +193,27 @@ class ArSerializer::Field
     )
   end
 
-  def self.parse_order(klass, order, only: nil, except: nil)
+  def self.parse_order(klass, order: nil, order_by: nil, direction: nil, only: nil, except: nil)
+    raise ArSerializer::InvalidQuery, 'invalid order' if order && (order_by || direction)
     primary_key = klass.primary_key.to_sym
-    key, mode = (
+    order_by = order_by&.to_s&.to_sym || primary_key
+    direction = direction&.to_s&.to_sym || :asc
+    if order # deprecated
       case order
       when Hash
         raise ArSerializer::InvalidQuery, 'invalid order' unless order.size == 1
-        order.first.map(&:to_sym)
+        order_by, direction = order.first.map(&:to_sym)
       when Symbol, 'asc', 'desc'
-        [primary_key, order.to_sym]
-      when NilClass
-        [primary_key, :asc]
+        direction = order.to_sym
+      else
+        raise ArSerializer::InvalidQuery, 'invalid order'
       end
-    )
-    info = klass._serializer_field_info(key)
-    order_key = (info&.order_column || key).to_s.underscore.to_sym
-    raise ArSerializer::InvalidQuery, "invalid order mode: #{mode.inspect}" unless [:asc, :desc].include? mode
-    raise ArSerializer::InvalidQuery, "unpermitted order key: #{key}" unless key == primary_key || (info&.orderable? && (!only || only.include?(key)) && !except&.include?(key))
-    [order_key, mode]
+    end
+    info = klass._serializer_field_info order_by
+    order_column = (info&.order_column || order_by).to_s.underscore.to_sym
+    raise ArSerializer::InvalidQuery, "invalid order direction: #{direction}" unless [:asc, :desc].include? direction
+    raise ArSerializer::InvalidQuery, "unpermitted order field: #{order_by}" unless order_by == primary_key || (info&.orderable? && (!only || only.include?(order_by)) && !except&.include?(order_by))
+    [order_column, direction]
   end
 
   def self.association_field(klass, name, only:, except:, scoped_access:, permission:, fallback:, type:, collection:)
@@ -217,8 +221,8 @@ class ArSerializer::Field
     only = [*only] if only
     except = [*except] if except
     if collection
-      preloader = lambda do |models, _context, limit: nil, order: nil, **_option|
-        preload_association klass, models, underscore_name, limit: limit, order: order, only: only, except: except
+      preloader = lambda do |models, _context, limit: nil, order: nil, order_by: nil, direction: nil, **_option|
+        preload_association klass, models, underscore_name, limit: limit, order: order, order_by: order_by, direction: direction, only: only, except: except
       end
       params_type = -> {
         orderable_keys = klass.reflect_on_association(underscore_name).klass._serializer_orderable_field_keys
@@ -229,7 +233,8 @@ class ArSerializer::Field
         modes = %w[asc desc]
         {
           limit?: :int,
-          order?: orderable_keys.map { |key| { key => modes } } +  modes
+          orderBy?: orderable_keys.size == 1 ? orderable_keys.first : orderable_keys,
+          direction?: modes
         }
       }
       data_block = lambda do |preloaded, _context, **_params|
@@ -246,16 +251,16 @@ class ArSerializer::Field
     new klass, name, preloaders: [preloader], data_block: data_block, only: only, except: except, scoped_access: scoped_access, permission: permission, fallback: fallback, type: type, params_type: params_type, orderable: false
   end
 
-  def self.preload_association(klass, models, name, limit: nil, order: nil, only: nil, except: nil)
+  def self.preload_association(klass, models, name, limit: nil, order: nil, order_by: nil, direction: nil, only: nil, except: nil)
     limit = limit&.to_i
-    order_key, order_mode = parse_order klass.reflect_on_association(name).klass, order, only: only, except: except
-    return TopNLoader.load_associations klass, models.map(&:id), name, limit: limit, order: { order_key => order_mode } if limit
+    order_column, order_direction = parse_order klass.reflect_on_association(name).klass, order: order, order_by: order_by, direction: direction, only: only, except: except
+    return TopNLoader.load_associations klass, models.map(&:id), name, limit: limit, order: { order_column => order_direction } if limit
     ActiveRecord::Associations::Preloader.new.preload models, name
-    return models.map { |m| [m.id || m, m.__send__(name)] }.to_h if order.nil?
+    return models.map { |m| [m.id || m, m.__send__(name)] }.to_h if !order && !order_by && !direction
     models.map do |model|
-      records_nonnils, records_nils = model.__send__(name).partition(&order_key)
-      records = records_nils.sort_by(&:id) + records_nonnils.sort_by { |r| [r[order_key], r.id] }
-      records.reverse! if order_mode == :desc
+      records_nonnils, records_nils = model.__send__(name).partition(&order_column)
+      records = records_nils.sort_by(&:id) + records_nonnils.sort_by { |r| [r[order_column], r.id] }
+      records.reverse! if order_direction == :desc
       [model.id || model, records]
     end.to_h
   end
