@@ -57,6 +57,22 @@ class ArSerializerTest < Minitest::Test
     assert_equal expected, ArSerializer.serialize(post, :user)
   end
 
+  def test_children_including_nil
+    u1, u2 = User.limit 2
+    klass = Class.new do
+      include ArSerializer::Serializable
+      serializer_field(:userOrNils) { [u1, nil, u2] }
+    end
+    result = ArSerializer.serialize klass.new, { userOrNils: :id }
+    expected = { userOrNils: [{ id: u1.id }, nil, { id: u2.id }] }
+    assert_equal expected, result
+  end
+
+  def test_serializing_nil
+    result = ArSerializer.serialize nil, :id
+    assert_equal nil, result
+  end
+
   def test_context
     star = Star.first
     user = star.user
@@ -441,6 +457,22 @@ class ArSerializerTest < Minitest::Test
     assert(output.any? { |user| user[:favorite_post] && user[:favorite_post][:post][:id] })
   end
 
+  def test_child_of_new_records
+    klass = Class.new do
+      include ArSerializer::Serializable
+      def initialize(user); @user = user; end
+      serializer_field(:user) { @user }
+    end
+    users = User.limit(3)
+    objects = users.map { |u| klass.new u }
+    posts = users.map { |u| Post.new user: u }
+    result1 = ArSerializer.serialize objects, { user: :id }
+    result2 = ArSerializer.serialize posts, { user: :id }
+    expected = users.map { |u| { user: { id: u.id } } }
+    assert_equal expected, result1
+    assert_equal expected, result2
+  end
+
   def test_defaults
     klass = Class.new do
       include ArSerializer::Serializable
@@ -456,7 +488,7 @@ class ArSerializerTest < Minitest::Test
   end
 
   def test_has_one_permission
-    ns = :test_has_one_permission
+    ns = __method__
     User.serializer_permission(namespace: ns) { id.odd? }
     Comment.serializer_field :userId, namespace: ns
     query = { comments: [:userId, :user] }
@@ -468,7 +500,7 @@ class ArSerializerTest < Minitest::Test
   end
 
   def test_has_many_permission
-    ns = :test_has_many_permission
+    ns = __method__
     Comment.serializer_permission(namespace: ns) { user_id.odd? }
     query = { posts: { comments: { user: :id } } }
     result = ArSerializer.serialize User.all, query, use: ns
@@ -478,7 +510,7 @@ class ArSerializerTest < Minitest::Test
   end
 
   def test_permission_toggle
-    ns = :test_permissoin_toggle
+    ns = __method__
     User.serializer_permission(namespace: ns) { id.odd? }
     User.serializer_field(:id_even?, private: true, namespace: ns) { id.even? }
     Comment.serializer_permission(namespace: ns) { id.odd? }
@@ -501,9 +533,8 @@ class ArSerializerTest < Minitest::Test
     assert all_comment_ids.any?(&:even?)
   end
 
-
   def test_permission_preloader
-    ns = :test_permission_preloader
+    ns = __method__
     p1_count = 0
     p2_count = 0
     p3_count = 0
@@ -526,6 +557,42 @@ class ArSerializerTest < Minitest::Test
     assert commented_users_count != users.size
     assert_equal [:p2, commented_users_count, :p3, users.uniq.size], users[0][:test]
     assert_equal [1, 1, 1], [p1_count, p2_count, p3_count]
+  end
+
+  def test_field_permission
+    ns = __method__
+    permission = ->(user, **kw) { self == user }
+    User.serializer_field(:email1, permission: permission, namespace: ns) { :email1 }
+    User.serializer_field(:email2, permission: permission, fallback: 'no_email', namespace: ns) { :email2 }
+    User.serializer_field(:email3, permission: permission, fallback: ->{ 'no_email' }, namespace: ns) { :email3 }
+    a = { email1: :email1, email2: :email2, email3: :email3 }
+    b = { email1: nil, email3: 'no_email', email2: 'no_email' }
+    query = [:email1, :email2, :email3]
+    users = [User.first, User.second, User.third]
+    users.each { |u| u.posts.create! }
+    result1 = ArSerializer.serialize users, query, context: users.third, use: ns
+    assert_equal [b, b, a], result1
+    result2 = ArSerializer.serialize users.map { |u| u.posts.first }, { user: query }, context: users.second, use: ns
+    assert_equal [{ user: b }, { user: a }, { user: b}], result2
+  end
+
+  def test_count_field_permission
+    ns = __method__
+    Comment.serializer_field :a, count_of: :stars, permission: ->(ctx, **kw) { id.odd? }, namespace: ns
+    result = ArSerializer.serialize Comment.all, [:id, :stars_count, :a], use: ns
+    odds, evens = result.partition { |r| r[:id].odd? }
+    assert odds.size >= 1 && odds.all? { |c| c[:a] == c[:stars_count] }
+    assert evens.size >= 1 && evens.all? { |c| c[:a] == 0 }
+  end
+
+  def test_preloader_fallback
+    ns = __method__
+    Comment.serializer_field :a, preload: ->cs { cs.map { |c| [c.id, 'odd'] if c.id.odd? }.compact.to_h }, fallback: 'even', namespace: ns
+    Comment.serializer_field :b, preload: ->cs { cs.map { |c| [c.id, 'odd'] if c.id.odd? }.compact.to_h }, fallback: ->{ 'even' }, namespace: ns
+    result = ArSerializer.serialize Comment.all, [:id, :a, :b], use: ns
+    assert ['even', 'odd'], result.map { |c| c[:a] }.uniq.sort
+    assert result.all? { |c| c[:a] == c[:id].odd? ? 'odd' : 'even' }
+    assert result.all? { |c| c[:a] == c[:b] }
   end
 
   def test_schema

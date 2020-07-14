@@ -29,6 +29,7 @@ module ArSerializer::Serializer
   end
 
   def self.serialize(model, query, context: nil, use: nil, permission: true)
+    return nil if model.nil?
     with_namespaces use do
       attributes = parse_args(query)[:attributes]
       if model.is_a?(ArSerializer::Serializable)
@@ -113,9 +114,12 @@ module ArSerializer::Serializer
         info = klass._serializer_field_info field_name
         preloadeds = info.preloaders.map { |p| preloader_values[[p, params]] } || []
         data_block = info.data_block
+        permission_block = info.permission
+        fallback = info.fallback
         sub_results = {}
         sub_models = []
         models.each do |model|
+          next if permission_block && !model.instance_exec(context, **(params || {}), &permission_block)
           child = model.instance_exec(*preloadeds, context, **(params || {}), &data_block)
           if child.is_a?(ArSerializer::ArrayLikeSerializable) || (child.is_a?(Array) && child.any? { |el| el.is_a? ArSerializer::Serializable })
             sub_results[model] = [:multiple, child]
@@ -165,6 +169,8 @@ module ArSerializer::Serializer
             data[column_name] = res.ar_custom_serializable_data result || {}
           when :data
             data[column_name] = res
+          else
+            data[column_name] = fallback&.is_a?(Proc) ? fallback.call : fallback
           end
         end
       end
