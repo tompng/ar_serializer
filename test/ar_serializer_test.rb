@@ -69,8 +69,7 @@ class ArSerializerTest < Minitest::Test
   end
 
   def test_serializing_nil
-    result = ArSerializer.serialize nil, :id
-    assert_equal nil, result
+    assert_nil ArSerializer.serialize(nil, :id)
   end
 
   def test_context
