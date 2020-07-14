@@ -221,8 +221,8 @@ class ArSerializer::Field
     only = [*only] if only
     except = [*except] if except
     if collection
-      preloader = lambda do |models, _context, limit: nil, order: nil, order_by: nil, direction: nil, **_option|
-        preload_association klass, models, underscore_name, limit: limit, order: order, order_by: order_by, direction: direction, only: only, except: except
+      preloader = lambda do |models, _context, limit: nil, order: nil, first: nil, last: nil, order_by: nil, direction: nil, **_option|
+        preload_association klass, models, underscore_name, limit: limit, order: order, first: first, last: last, order_by: order_by, direction: direction, only: only, except: except
       end
       params_type = -> {
         orderable_keys = klass.reflect_on_association(underscore_name).klass._serializer_orderable_field_keys
@@ -232,7 +232,8 @@ class ArSerializer::Field
         orderable_keys.sort!
         modes = %w[asc desc]
         {
-          limit?: :int,
+          first?: :int,
+          last?: :int,
           orderBy?: orderable_keys.size == 1 ? orderable_keys.first : orderable_keys,
           direction?: modes
         }
@@ -251,10 +252,17 @@ class ArSerializer::Field
     new klass, name, preloaders: [preloader], data_block: data_block, only: only, except: except, scoped_access: scoped_access, permission: permission, fallback: fallback, type: type, params_type: params_type, orderable: false
   end
 
-  def self.preload_association(klass, models, name, limit: nil, order: nil, order_by: nil, direction: nil, only: nil, except: nil)
-    limit = limit&.to_i
+  def self.preload_association(klass, models, name, limit: nil, order: nil, first: nil, last: nil, order_by: nil, direction: nil, only: nil, except: nil)
+    raise ArSerializer::InvalidQuery, 'invalid count option' if (limit && (first || last)) || (first && last)
+    first = (first || limit)&.to_i
+    last = last&.to_i
     order_column, order_direction = parse_order klass.reflect_on_association(name).klass, order: order, order_by: order_by, direction: direction, only: only, except: except
-    return TopNLoader.load_associations klass, models.map(&:id), name, limit: limit, order: { order_column => order_direction } if limit
+    if first || last
+      order_option = { order_column => first ? order_direction : (order_direction == :asc ? :desc : :asc) }
+      result = TopNLoader.load_associations klass, models.map(&:id), name, limit: first || last, order: order_option
+      result = result.transform_values!(&:reverse!) if last
+      return result
+    end
     ActiveRecord::Associations::Preloader.new.preload models, name
     return models.map { |m| [m.id || m, m.__send__(name)] }.to_h if !order && !order_by && !direction
     models.map do |model|
