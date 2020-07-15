@@ -69,8 +69,7 @@ class ArSerializerTest < Minitest::Test
   end
 
   def test_serializing_nil
-    result = ArSerializer.serialize nil, :id
-    assert_equal nil, result
+    assert_nil ArSerializer.serialize(nil, :id)
   end
 
   def test_context
@@ -234,7 +233,7 @@ class ArSerializerTest < Minitest::Test
   def test_association_params
     user = Comment.first.post.user
     expected = { posts: user.posts.map { |p| { comments: p.comments.order(body: :asc).limit(1).map { |c| { id: c.id } } } } }
-    query = { posts: { comments: [:id, params: { limit: 1, order_by: :body }] } }
+    query = { posts: { comments: [:id, params: { first: 1, order_by: :body }] } }
     data = ArSerializer.serialize user, query
     assert_equal expected, data
     data2 = ArSerializer.serialize user, JSON.parse(query.to_json)
@@ -417,16 +416,29 @@ class ArSerializerTest < Minitest::Test
     end
   end
 
+  def test_order_first_last
+    [:asc, :desc].product([:first, :last, :limit]) do |direction, first_last|
+      result = ArSerializer.serialize(Post.all, comments: [:id, params: { order_by: :id, direction: direction, first_last => 2 }])
+      expected = Post.all.map do |post|
+        method = first_last == :limit ? :first : first_last
+        comments = post.comments.order(id: direction).to_a.__send__(method, 2)
+        { comments: comments.map { |c| { id: c.id } } }
+      end
+      binding.irb if expected != result
+      assert_equal expected, result
+    end
+  end
+
   def test_camelized_association
     posts = ArSerializer.serialize Post.all, { Comments: :id, comments: :id }
     assert(posts.all? { |post| post[:comments] == post[:Comments] })
   end
 
   def test_non_array_composite_value
-    output = ArSerializer.serialize User.all, { posts_with_total: [:id, params: { limit: 2 }] }
+    output = ArSerializer.serialize User.all, { first2posts_with_total: :id }
     output_ref = ArSerializer.serialize User.all, { posts: :id }
     result = output.zip(output_ref).all? do |o, oref|
-      posts_with_total = o[:posts_with_total]
+      posts_with_total = o[:first2posts_with_total]
       posts = oref[:posts]
       posts_with_total[:total] == posts.size && posts_with_total[:list] == posts.take(2)
     end

@@ -11,11 +11,11 @@ class User < ActiveRecord::Base
   serializer_field :posts_only_body, association: :posts, only: :body
   serializer_field(:favorite_post, type: -> { FavoritePost }) { FavoritePost.new id if id.odd? }
   serializer_field(
-    :posts_with_total,
+    :first2posts_with_total,
     type: -> { { total: :int, list: [Post] } },
-    preload: lambda do |models, _context, **params|
+    preload: lambda do |models, _context|
       [
-        ArSerializer::Field.preload_association(User, models, :posts, **params),
+        ArSerializer::Field.preload_association(User, models, :posts, { order: { id: :asc }, limit: 2 }),
         User.where(id: models.map(&:id)).joins(:posts).group(:id).count
       ]
     end

@@ -85,7 +85,8 @@ class Post < ActiveRecord::Base
   has_many :comments
   serializer_field :comments
 end
-ArSerializer.serialize Post.all, { comments: [:id, params: { order_by: :id, direction: :desc, limit: 2 }] }
+ArSerializer.serialize Post.all, { comments: [:id, params: { order_by: :createdAt, direction: :desc, first: 10 }] }
+ArSerializer.serialize Post.all, { comments: [:id, params: { order_by: :updatedAt, last: 10 }] }
 
 # context and params
 class Post < ActiveRecord::Base
