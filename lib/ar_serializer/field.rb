@@ -1,5 +1,6 @@
 require 'ar_serializer/error'
 require 'top_n_loader'
+require 'set'
 
 class ArSerializer::Field
   attr_reader :includes, :preloaders, :data_block, :only, :except, :scoped_access, :order_column, :permission, :fallback
@@ -178,8 +179,13 @@ class ArSerializer::Field
     end
     if !data_block && preloaders.size == 1
       data_block = ->(preloaded, _context, **_params) do
-        next preloaded[id] unless fallback
-        preloaded.has_key?(id) ? preloaded[id] : (fallback.is_a?(Proc) ? fallback.call : fallback)
+        if preloaded.is_a? Set
+          preloaded.include? id
+        elsif fallback.nil?
+          preloaded[id] # returns preloaded.default unless preloaded.has_key?(id)
+        else
+          preloaded.has_key?(id) ? preloaded[id] : fallback
+        end
       end
     end
     raise ArgumentError, 'data_block needed if multiple preloaders are present' if !preloaders.empty? && data_block.nil?

@@ -170,7 +170,7 @@ module ArSerializer::Serializer
           when :data
             data[column_name] = res
           else
-            data[column_name] = fallback&.is_a?(Proc) ? fallback.call : fallback
+            data[column_name] = fallback
           end
         end
       end

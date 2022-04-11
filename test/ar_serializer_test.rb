@@ -576,10 +576,9 @@ class ArSerializerTest < Minitest::Test
     permission = ->(user, **kw) { self == user }
     User.serializer_field(:email1, permission: permission, namespace: ns) { :email1 }
     User.serializer_field(:email2, permission: permission, fallback: 'no_email', namespace: ns) { :email2 }
-    User.serializer_field(:email3, permission: permission, fallback: ->{ 'no_email' }, namespace: ns) { :email3 }
-    a = { email1: :email1, email2: :email2, email3: :email3 }
-    b = { email1: nil, email3: 'no_email', email2: 'no_email' }
-    query = [:email1, :email2, :email3]
+    a = { email1: :email1, email2: :email2 }
+    b = { email1: nil, email2: 'no_email' }
+    query = [:email1, :email2]
     users = [User.first, User.second, User.third]
     users.each { |u| u.posts.create! }
     result1 = ArSerializer.serialize users, query, context: users.third, use: ns
@@ -597,14 +596,19 @@ class ArSerializerTest < Minitest::Test
     assert evens.size >= 1 && evens.all? { |c| c[:a] == 0 }
   end
 
+  def test_preloader_set
+    ns = __method__
+    Comment.serializer_field :a, preload: ->cs { cs.map(&:id).select(&:even?).to_set }, namespace: ns
+    result = ArSerializer.serialize Comment.all, [:id, :a], use: ns
+    assert result.all? { |c| c[:a] == c[:id].even? }
+  end
+
   def test_preloader_fallback
     ns = __method__
     Comment.serializer_field :a, preload: ->cs { cs.map { |c| [c.id, 'odd'] if c.id.odd? }.compact.to_h }, fallback: 'even', namespace: ns
-    Comment.serializer_field :b, preload: ->cs { cs.map { |c| [c.id, 'odd'] if c.id.odd? }.compact.to_h }, fallback: ->{ 'even' }, namespace: ns
-    result = ArSerializer.serialize Comment.all, [:id, :a, :b], use: ns
+    result = ArSerializer.serialize Comment.all, [:id, :a], use: ns
     assert ['even', 'odd'], result.map { |c| c[:a] }.uniq.sort
     assert result.all? { |c| c[:a] == c[:id].odd? ? 'odd' : 'even' }
-    assert result.all? { |c| c[:a] == c[:b] }
   end
 
   def test_schema
