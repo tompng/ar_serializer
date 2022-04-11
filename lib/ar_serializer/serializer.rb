@@ -61,7 +61,7 @@ module ArSerializer::Serializer
           message = "No serializer field `#{field_name}`#{" namespaces: #{current_namespaces.compact}" if current_namespaces.any?} for #{klass}"
           raise ArSerializer::InvalidQuery, message
         end
-        ActiveRecord::Associations::Preloader.new.preload models, field.includes if field.includes.present?
+        ArSerializer.preload_associations models, field.includes if field.includes.present?
       end
 
       preload = lambda do |preloader, params|

@@ -263,7 +263,7 @@ class ArSerializer::Field
       result = result.transform_values!(&:reverse!) if last
       return result
     end
-    ActiveRecord::Associations::Preloader.new.preload models, name
+    ArSerializer.preload_associations models, name
     return models.map { |m| [m.id || m, m.__send__(name)] }.to_h if !order && !order_by && !direction
     models.map do |model|
       records_nonnils, records_nils = model.__send__(name).partition(&order_column)

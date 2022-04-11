@@ -153,8 +153,8 @@ module ArSerializer::GraphQL
     end
 
     def self.from(type, only = nil, except = nil)
-      type = [type[0...-1].to_sym, nil] if type.is_a?(Symbol) && type.to_s.ends_with?('?')
-      type = [type[0...-1], nil] if type.is_a?(String) && type.ends_with?('?')
+      type = [type[0...-1].to_sym, nil] if type.is_a?(Symbol) && type.to_s.end_with?('?')
+      type = [type[0...-1], nil] if type.is_a?(String) && type.end_with?('?')
       case type
       when Class
         SerializableTypeClass.new type, only, except
@@ -268,7 +268,7 @@ module ArSerializer::GraphQL
     end
 
     def sample
-      type.reject { |k| k.to_s.ends_with? '?' }.transform_values do |v|
+      type.reject { |k| k.to_s.end_with? '?' }.transform_values do |v|
         TypeClass.from(v).sample
       end
     end
