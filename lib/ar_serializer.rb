@@ -7,6 +7,16 @@ module ArSerializer
   def self.serialize(model, query, **option)
     Serializer.serialize(model, query, **option)
   end
+
+  if ActiveRecord::VERSION::MAJOR >= 7
+    def self.preload_associations(models, associations)
+      ActiveRecord::Associations::Preloader.new(records: models, associations: associations).call
+    end
+  else
+    def self.preload_associations(models, associations)
+      ActiveRecord::Associations::Preloader.new.preload models, associations
+    end
+  end
 end
 
 module ArSerializer::Serializable

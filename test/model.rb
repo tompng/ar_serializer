@@ -15,7 +15,7 @@ class User < ActiveRecord::Base
     type: -> { { total: :int, list: [Post] } },
     preload: lambda do |models, _context|
       [
-        ArSerializer::Field.preload_association(User, models, :posts, { order: { id: :asc }, limit: 2 }),
+        ArSerializer::Field.preload_association(User, models, :posts, order: { id: :asc }, limit: 2),
         User.where(id: models.map(&:id)).joins(:posts).group(:id).count
       ]
     end

@@ -418,7 +418,7 @@ class ArSerializerTest < Minitest::Test
 
   def test_order_first_last
     [:asc, :desc].product([:first, :last, :limit]) do |direction, first_last|
-      result = ArSerializer.serialize(Post.all, comments: [:id, params: { order_by: :id, direction: direction, first_last => 2 }])
+      result = ArSerializer.serialize(Post.all, { comments: [:id, params: { order_by: :id, direction: direction, first_last => 2 }] })
       expected = Post.all.map do |post|
         method = first_last == :limit ? :first : first_last
         comments = post.comments.order(id: direction).to_a.__send__(method, 2)
