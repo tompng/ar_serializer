@@ -81,10 +81,18 @@ class ArSerializer::Field
     end
     return :any if any && arguments.empty?
     arguments.map do |key, req|
-      type = key.to_s.match?(/^(.+_)?id$/) ? :int : :any
       camelcase = key.to_s.camelcase :lower
-      name = key.to_s.underscore
-      type = [type] if name.singularize.pluralize == name
+      type = (
+        case key
+        when /^(.+_)?id$/
+          :int
+        when /^(.+_)?ids$/
+          [:int]
+        else
+          name = key.to_s.underscore
+          name.singularize.pluralize == name ? [:any] : :any
+        end
+      )
       [req ? camelcase : "#{camelcase}?", type]
     end.to_h
   end

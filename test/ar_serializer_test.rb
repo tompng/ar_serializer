@@ -655,6 +655,23 @@ class ArSerializerTest < Minitest::Test
     assert ArSerializer::TypeScript.generate_type_definition(schema)
   end
 
+  def test_params_default_type
+    args_type = ArSerializer::Field.new(Object, :foo, data_block: ->(ctx, id:, ids:, foo_id:,foo_ids:, bar_id: 0, bar_ids: [], apple:, apples:, book: 0, books: []){}).arguments
+    expected = {
+      'id' => :int,
+      'ids' => [:int],
+      'fooId' => :int,
+      'fooIds' => [:int],
+      'barId?' => :int,
+      'barIds?' => [:int],
+      'apple' => :any,
+      'apples' => [:any],
+      'book?' => :any,
+      'books?' => [:any]
+    }
+    assert_equal expected, args_type
+  end
+
   def test_graphql_query_parse
     random_json = lambda do |level|
       chars = %("\\{[]},0a).chars
