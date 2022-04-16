@@ -528,9 +528,10 @@ class ArSerializerTest < Minitest::Test
     Comment.serializer_permission(namespace: ns) { id.odd? }
     Comment.serializer_field(:id_even?, private: true, namespace: ns) { id.even? }
     Post.serializer_field :evenUser, association: :user, scoped_access: :id_even?, namespace: ns
-    Post.serializer_field :allUser, association: :user, scoped_access: :false, namespace: ns
+    Post.serializer_field :allUser, association: :user, scoped_access: false, namespace: ns
     Post.serializer_field :evenComments, association: :comments, scoped_access: :id_even?, namespace: ns
-    Post.serializer_field :allComments, association: :comments, scoped_access: :false, namespace: ns
+    Post.serializer_field :allComments, association: :comments, scoped_access: false, namespace: ns
+    Post.serializer_field :wrongScopeComments, association: :comments, scoped_access: :foobar, namespace: ns
     query = { comments: :id, evenComments: :id, allComments: :id, user: :id, allUser: :id, evenUser: :id }
     posts = ArSerializer.serialize Post.all, query, use: ns
     assert posts.map { |p| p[:user]&.[] :id }.compact.all?(&:odd?)
@@ -543,6 +544,7 @@ class ArSerializerTest < Minitest::Test
     all_comment_ids = posts.flat_map { |p| p[:allComments].map { |c| c[:id] } }
     assert all_comment_ids.any?(&:odd?)
     assert all_comment_ids.any?(&:even?)
+    assert_raises(ArgumentError) { ArSerializer.serialize Post.all, :wrongScopeComments, use: ns }
   end
 
   def test_permission_preloader
