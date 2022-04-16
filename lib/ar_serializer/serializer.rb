@@ -78,7 +78,12 @@ module ArSerializer::Serializer
       end
 
       preloader_values = {}
-      permission_field = klass._serializer_field_info permission == true ? :permission : permission if permission
+      if permission == true
+        permission_field = klass._serializer_field_info :permission
+      elsif permission
+        permission_field = klass._serializer_field_info permission
+        raise ArgumentError, "No permission field #{permission} for #{klass}" unless permission_field
+      end
       if permission_field
         preloadeds = permission_field.preloaders.map do |p|
           preloader_values[[p, nil]] ||= preload.call p, nil
