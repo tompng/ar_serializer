@@ -2,7 +2,7 @@
 
 require 'bundler/setup'
 require 'ar_serializer'
-require 'pry'
+require 'irb'
 require_relative '../test/db'
 
-Pry.start
+IRB.start
