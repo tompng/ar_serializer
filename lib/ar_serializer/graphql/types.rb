@@ -164,7 +164,7 @@ module ArSerializer::GraphQL
         if type.size == 1
           ListTypeClass.new type.first, only, except
         elsif type.size == 2 && type.last.nil?
-          OptionalTypeClass.new type
+          OptionalTypeClass.new type, only, except
         else
           OrTypeClass.new type, only, except
         end
