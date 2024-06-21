@@ -11,7 +11,13 @@ end
 
 module SQLCounts
   module M
+    # activerecord <= 7.0
     def exec_query(*args, **option)
+      SQLCounts.increment_count
+      super
+    end
+    # activerecord >= 7.1
+    def internal_exec_query(*args, **option)
       SQLCounts.increment_count
       super
     end
