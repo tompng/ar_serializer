@@ -6,4 +6,4 @@ git_source(:github) {|repo_name| "https://github.com/#{repo_name}" }
 gemspec path: ".."
 
 gem "sqlite3", "~> 1.4"
-gem "activerecord", "~> 7.1.0"
+gem "activerecord", "~> 7.0"

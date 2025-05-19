@@ -14,7 +14,7 @@ module DB
 
   def self.migrate
     File.unlink DATABASE_CONFIG[:database] if File.exist? DATABASE_CONFIG[:database]
-    ActiveRecord::Base.clear_all_connections!
+    ActiveRecord::Base.connection_handler.clear_all_connections!
     ActiveRecord::Migration::Current.class_eval do
       create_table :users do |t|
         t.string :name

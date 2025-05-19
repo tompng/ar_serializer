@@ -73,7 +73,7 @@ class ArSerializer::GraphQL::Parser
   end
 
   def parse_name
-    name = ''
+    name = +''
     name << chars.shift while chars.first && chars.first =~ /[a-zA-Z0-9_]/
     name unless name.empty?
   end
@@ -94,7 +94,7 @@ class ArSerializer::GraphQL::Parser
     case chars.first
     when '"'
       chars.shift
-      s = ''
+      s = +''
       loop do
         if chars.first == '\\'
           s << chars.shift
@@ -132,7 +132,7 @@ class ArSerializer::GraphQL::Parser
       name = parse_name
       variables[name]
     when /[0-9+\-]/
-      s = ''
+      s = +''
       s << chars.shift while chars.first.match?(/[0-9.e+\-]/)
       s.match?(/\.|e/) ? s.to_f : s.to_i
     when /[a-zA-Z]/
@@ -216,7 +216,7 @@ class ArSerializer::GraphQL::Parser
   def parse_definition
     type = parse_name
     consume_blank
-    args_text = ''
+    args_text = +''
     if type
       args_text << chars.shift while chars.first && chars.first != '{'
     end
