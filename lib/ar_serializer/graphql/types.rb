@@ -50,7 +50,7 @@ module ArSerializer::GraphQL
       arg_types = field.arguments.map do |key, type|
         "#{key}: #{TypeClass.from(type).ts_type}"
       end
-      "{ #{arg_types.join '; '} }"
+      arg_types.empty? ? 'Record<string, never>' : "{ #{arg_types.join '; '} }"
     end
 
     serializer_field :name, :args
