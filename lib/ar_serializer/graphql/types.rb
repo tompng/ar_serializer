@@ -105,9 +105,7 @@ module ArSerializer::GraphQL
 
     def collect_types(types); end
 
-    def description
-      ts_type
-    end
+    def description = ts_type
 
     def name; end
 
@@ -161,25 +159,17 @@ module ArSerializer::GraphQL
       @type = type
     end
 
-    def kind
-      'SCALAR'
-    end
+    def kind = 'SCALAR'
 
-    def name
-      :other
-    end
+    def name = :other
 
     def collect_types(types)
       types[:other] = true
     end
 
-    def gql_type
-      'SCALAR'
-    end
+    def gql_type = 'SCALAR'
 
-    def ts_type
-      @type
-    end
+    def ts_type = @type
   end
 
   class ScalarTypeClass < TypeClass
@@ -187,9 +177,7 @@ module ArSerializer::GraphQL
       @type = type
     end
 
-    def kind
-      'SCALAR'
-    end
+    def kind = 'SCALAR'
 
     def name
       case type
@@ -214,9 +202,7 @@ module ArSerializer::GraphQL
       types[name] = true
     end
 
-    def gql_type
-      type
-    end
+    def gql_type = type
 
     def ts_type
       case type
@@ -233,13 +219,9 @@ module ArSerializer::GraphQL
   end
 
   class HashTypeClass < TypeClass
-    def kind
-      'SCALAR'
-    end
+    def kind = 'SCALAR'
 
-    def name
-      :other
-    end
+    def name = :other
 
     def collect_types(types)
       types[:other] = true
@@ -256,9 +238,7 @@ module ArSerializer::GraphQL
       nil
     end
 
-    def gql_type
-      'OBJECT'
-    end
+    def gql_type = 'OBJECT'
 
     def ts_type
       return 'Record<string, never>' if type.empty?
@@ -294,9 +274,7 @@ module ArSerializer::GraphQL
       [*except].map(&:to_s)
     end
 
-    def kind
-      'OBJECT'
-    end
+    def kind = 'OBJECT'
 
     def name
       name_segments = [type.name.delete(':')]
@@ -325,17 +303,11 @@ module ArSerializer::GraphQL
       fields.each { |field| field.collect_types types }
     end
 
-    def association_type
-      self
-    end
+    def association_type = self
 
-    def gql_type
-      name
-    end
+    def gql_type = name
 
-    def ts_type
-      "Type#{name}"
-    end
+    def ts_type = "Type#{name}"
 
     def eql?(t)
       self.class == t.class && self.compare_elements == t.compare_elements
@@ -355,89 +327,55 @@ module ArSerializer::GraphQL
   end
 
   class OptionalTypeClass < TypeClass
-    def kind
-      of_type.kind
-    end
+    def kind = type.kind
 
-    def name
-      of_type.name
-    end
+    def name = type.name
 
-    def of_type
-      type
-    end
+    def of_type = type
 
-    def association_type
-      of_type.association_type
-    end
+    def association_type = type.association_type
 
     def collect_types(types)
-      of_type.collect_types types
+      type.collect_types types
     end
 
-    def gql_type
-      of_type.gql_type
-    end
+    def gql_type = type.gql_type
 
-    def ts_type
-      "(#{of_type.ts_type} | null)"
-    end
+    def ts_type = "(#{type.ts_type} | null)"
   end
 
   class OrTypeClass < TypeClass
-    def kind
-      'OBJECT'
-    end
+    def kind = 'OBJECT'
 
-    def name
-      :other
-    end
+    def name = :other
 
-    def of_types
-      type
-    end
+    def of_types = type
 
     def collect_types(types)
       types[:other] = true
-      of_types.map { |t| t.collect_types types }
+      type.map { |t| t.collect_types types }
     end
 
-    def gql_type
-      kind
-    end
+    def gql_type = kind
 
-    def ts_type
-      '(' + of_types.map(&:ts_type).join(' | ') + ')'
-    end
+    def ts_type = "(#{type.map(&:ts_type).join(' | ')})"
   end
 
   class ListTypeClass < TypeClass
-    def kind
-      'LIST'
-    end
+    def kind = 'LIST'
 
-    def name
-      'LIST'
-    end
+    def name = 'LIST'
 
-    def of_type
-      type
-    end
+    def of_type = type
 
     def collect_types(types)
-      of_type.collect_types types
+      type.collect_types types
     end
 
-    def association_type
-      of_type.association_type
-    end
+    def association_type = type.association_type
 
-    def gql_type
-      "[#{of_type.gql_type}]"
-    end
+    def gql_type = "[#{type.gql_type}]"
 
-    def ts_type
-      "(#{of_type.ts_type} [])"
-    end
+    def ts_type = "(#{type.ts_type} [])"
   end
 end
