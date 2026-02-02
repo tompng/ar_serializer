@@ -7,3 +7,4 @@ gemspec path: ".."
 
 gem "sqlite3"
 gem "activerecord", "~> 8.0"
+gem "benchmark"

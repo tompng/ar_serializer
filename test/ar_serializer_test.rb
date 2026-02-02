@@ -730,12 +730,12 @@ class ArSerializerTest < Minitest::Test
     assert_includes ts, 'user4: (TypeUserExceptAge | null)'
     assert_includes ts, 'users1: (TypeUserOnlyAgeEmail [])'
     assert_includes ts, 'users2: (TypeUserExceptEmail [])'
-    assert_match /TypeUserExceptName \{\s+id: number\s+age: number\s+email: string\s+_meta\?/, ts
-    assert_match /TypeUserExceptAge \{\s+id: number\s+name: string\s+email: string\s+_meta\?/, ts
-    assert_match /TypeUserExceptEmail \{\s+id: number\s+name: string\s+age: number\s+_meta\?/, ts
-    assert_match /TypeUserOnlyIdName \{\s+id: number\s+name: string\s+_meta\?/, ts
-    assert_match /TypeUserOnlyNameAge \{\s+name: string\s+age: number\s+_meta\?/, ts
-    assert_match /TypeUserOnlyAgeEmail \{\s+age: number\s+email: string\s+_meta\?/, ts
+    assert_match(/TypeUserExceptName \{\s+id: number\s+age: number\s+email: string\s+_meta\?/, ts)
+    assert_match(/TypeUserExceptAge \{\s+id: number\s+name: string\s+email: string\s+_meta\?/, ts)
+    assert_match(/TypeUserExceptEmail \{\s+id: number\s+name: string\s+age: number\s+_meta\?/, ts)
+    assert_match(/TypeUserOnlyIdName \{\s+id: number\s+name: string\s+_meta\?/, ts)
+    assert_match(/TypeUserOnlyNameAge \{\s+name: string\s+age: number\s+_meta\?/, ts)
+    assert_match(/TypeUserOnlyAgeEmail \{\s+age: number\s+email: string\s+_meta\?/, ts)
   end
 
   def test_graphql_query_parse
