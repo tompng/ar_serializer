@@ -5,7 +5,7 @@ module ArSerializer::GraphQL
     def initialize(name, type)
       @optional = name.to_s.end_with? '?' # TODO: refactor
       @name = name.to_s.delete '?'
-      @type = TypeClass.from type
+      @type = type
     end
     serializer_field :name
     serializer_field :type, except: :fields
@@ -22,8 +22,10 @@ module ArSerializer::GraphQL
     end
 
     def args
-      return [] if field.arguments == :any
-      field.arguments.map do |key, type|
+      arguments = field.arguments_type
+      return [] unless arguments.is_a?(HashTypeClass)
+
+      arguments.type.map do |key, type|
         ArgClass.new key, type
       end
     end
@@ -33,24 +35,26 @@ module ArSerializer::GraphQL
     end
 
     def collect_types(types)
-      types[:any] = true if field.arguments == :any
-      args.each { |arg| arg.type.collect_types types }
+      field.arguments_type.collect_types types
       type.collect_types types
     end
 
     def args_required?
-      return false if field.arguments == :any
-      field.arguments.any? do |key, type|
-        !key.match?(/\?$/) && !(type.is_a?(Array) && type.include?(nil))
+      arguments_type = field.arguments_type
+      case arguments_type
+      when TSTypeClass
+        true
+      when HashTypeClass
+        arguments_type.type.any? do |k, v|
+          !k.end_with?('?') && !v.is_a?(OptionalTypeClass)
+        end
+      else
+        false
       end
     end
 
     def args_ts_type
-      return 'any' if field.arguments == :any
-      arg_types = field.arguments.map do |key, type|
-        "#{key}: #{TypeClass.from(type).ts_type}"
-      end
-      arg_types.empty? ? 'Record<string, never>' : "{ #{arg_types.join '; '} }"
+      field.arguments_type.ts_type
     end
 
     serializer_field :name, :args
@@ -92,40 +96,12 @@ module ArSerializer::GraphQL
 
   class TypeClass
     include ::ArSerializer::Serializable
-    attr_reader :type, :only, :except
-    def initialize(type, only = nil, except = nil)
+    attr_reader :type
+    def initialize(type)
       @type = type
-      @only = only
-      @except = except
-      validate!
     end
 
     class InvalidType < StandardError; end
-
-    def validate!
-      valid_symbols = %i[number int float string boolean any unknown]
-      invalids = []
-      recursive_validate = lambda do |t|
-        case t
-        when Array
-          t.each { |v| recursive_validate.call v }
-        when Hash
-          t.each_value { |v| recursive_validate.call v }
-        when String, Numeric, true, false, nil
-          return
-        when Class
-          invalids << t unless t.ancestors.include? ArSerializer::Serializable
-        when Symbol
-          invalids << t unless valid_symbols.include? t.to_s.gsub(/\?$/, '').to_sym
-        else
-          invalids << t
-        end
-      end
-      recursive_validate.call type
-      return if invalids.empty?
-      message = "Valid types are String, Numeric, Hash, Array, ArSerializer::Serializable, true, false, nil and Symbol#{valid_symbols}"
-      raise InvalidType, "Invalid type: #{invalids.map(&:inspect).join(', ')}. #{message}"
-    end
 
     def collect_types(types); end
 
@@ -154,23 +130,61 @@ module ArSerializer::GraphQL
 
     def self.from(type, only = nil, except = nil)
       type = [type[0...-1].to_sym, nil] if type.is_a?(Symbol) && type.to_s.end_with?('?')
-      type = [type[0...-1], nil] if type.is_a?(String) && type.end_with?('?')
+      type = [type[0...-1], nil] if type.is_a?(String) && type.end_with?('?') # ??
       case type
       when Class
+        raise InvalidType, "#{type} must include ArSerializer::Serializable" unless type.ancestors.include? ArSerializer::Serializable
+
         SerializableTypeClass.new type, only, except
-      when Symbol, String, Numeric, true, false, nil
+      when :number, :int, :float, :string, :boolean, :any, :unknown
+        ScalarTypeClass.new type
+      when String, Numeric, true, false, nil
         ScalarTypeClass.new type
       when Array
         if type.size == 1
-          ListTypeClass.new type.first, only, except
+          ListTypeClass.new from(type.first, only, except)
         elsif type.size == 2 && type.last.nil?
-          OptionalTypeClass.new type, only, except
+          OptionalTypeClass.new from(type.first, only, except)
         else
-          OrTypeClass.new type, only, except
+          OrTypeClass.new type.map {|v| from(v, only, except) }
         end
       when Hash
-        HashTypeClass.new type, only, except
+        HashTypeClass.new type.transform_values {|v| from(v, only, except) }
+      when ArSerializer::TSType
+        TSTypeClass.new type.type
+      else
+        raise InvalidType, "Invalid type: #{type}"
       end
+    end
+  end
+
+  class TSTypeClass < TypeClass
+    def initialize(type)
+      @type = type
+    end
+
+    def kind
+      'SCALAR'
+    end
+
+    def name
+      :other
+    end
+
+    def collect_types(types)
+      types[:other] = true
+    end
+
+    def gql_type
+      'SCALAR'
+    end
+
+    def sample
+      nil
+    end
+
+    def ts_type
+      @type
     end
   end
 
@@ -250,14 +264,14 @@ module ArSerializer::GraphQL
 
     def collect_types(types)
       types[:other] = true
-      type.values.map do |v|
-        TypeClass.from(v, only, except).collect_types(types)
+      type.values.each do |v|
+        v.collect_types(types)
       end
     end
 
     def association_type
       type.values.each do |v|
-        t = TypeClass.from(v, only, except).association_type
+        t = v.association_type
         return t if t
       end
       nil
@@ -269,20 +283,36 @@ module ArSerializer::GraphQL
 
     def sample
       type.reject { |k| k.to_s.end_with? '?' }.transform_values do |v|
-        TypeClass.from(v).sample
+        v.sample
       end
     end
 
     def ts_type
+      return 'Record<string, never>' if type.empty?
+
       fields = type.map do |key, value|
         k = key.to_s == '*' ? '[key: string]' : key
-        "#{k}: #{TypeClass.from(value, only, except).ts_type}"
+        "#{k}: #{value.ts_type}"
       end
       "{ #{fields.join('; ')} }"
+    end
+
+    def to_gql_args
+      type.map do |key, type|
+        ArgClass.new key, type
+      end
     end
   end
 
   class SerializableTypeClass < TypeClass
+    attr_reader :only, :except
+
+    def initialize(type, only = nil, except = nil)
+      super type
+      @only = only
+      @except = except
+    end
+
     def field_only
       [*only].map(&:to_s)
     end
@@ -361,7 +391,7 @@ module ArSerializer::GraphQL
     end
 
     def of_type
-      TypeClass.from type.first, only, except
+      type
     end
 
     def association_type
@@ -395,7 +425,7 @@ module ArSerializer::GraphQL
     end
 
     def of_types
-      type.map { |t| TypeClass.from t, only, except }
+      type
     end
 
     def collect_types(types)
@@ -426,7 +456,7 @@ module ArSerializer::GraphQL
     end
 
     def of_type
-      TypeClass.from type, only, except
+      type
     end
 
     def collect_types(types)

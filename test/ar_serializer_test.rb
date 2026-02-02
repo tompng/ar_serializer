@@ -424,7 +424,6 @@ class ArSerializerTest < Minitest::Test
         comments = post.comments.order(id: direction).to_a.__send__(method, 2)
         { comments: comments.map { |c| { id: c.id } } }
       end
-      binding.irb if expected != result
       assert_equal expected, result
     end
   end
@@ -452,7 +451,9 @@ class ArSerializerTest < Minitest::Test
       [{ x: [serializable_class] }, true],
       [{ x: [Object.new] }, false],
       [{ x: [Class.new] }, false],
-      [{ x: [:strange] }, false]
+      [{ x: [:strange] }, false],
+      [ArSerializer::TSType.new('null | undefined'), true],
+      [{ x: ArSerializer::TSType.new('null | undefined') }, true]
     ].each do |type, ok|
       klass = Class.new { include ArSerializer::Serializable; def self.name; 'B'; end; serializer_field :to_s, type: type }
       test = -> { ArSerializer::TypeScript.generate_type_definition klass }
@@ -625,6 +626,10 @@ class ArSerializerTest < Minitest::Test
       serializer_field :users, type: [User], params_type: { words: [:string] } do
         User.all
       end
+      serializer_field :something, ts_type: '{ x: unknown }', ts_params_type: 'Record<string, number>' do
+        { x: 1 }
+      end
+
       serializer_field :__schema do
         ArSerializer::GraphQL::SchemaClass.new self.class
       end
@@ -658,20 +663,79 @@ class ArSerializerTest < Minitest::Test
   end
 
   def test_params_default_type
-    args_type = ArSerializer::Field.new(Object, :foo, data_block: ->(ctx, id:, ids:, foo_id:,foo_ids:, bar_id: 0, bar_ids: [], apple:, apples:, book: 0, books: []){}).arguments
-    expected = {
+    field = ArSerializer::Field.new(Object, :foo, data_block: ->(ctx, id:, ids:, foo_id:,foo_ids:, bar_id: 0, bar_ids: [], apple:, apples:, book: 0, books: []){})
+    expected = ArSerializer::GraphQL::TypeClass.from({
       'id' => :int,
       'ids' => [:int],
       'fooId' => :int,
       'fooIds' => [:int],
-      'barId?' => :int,
-      'barIds?' => [:int],
       'apple' => :any,
       'apples' => [:any],
+      'barId?' => :int,
+      'barIds?' => [:int],
       'book?' => :any,
       'books?' => [:any]
-    }
-    assert_equal expected, args_type
+    }).ts_type
+    assert_equal expected, field.arguments_type.ts_type
+  end
+
+  def test_ts_type_generate
+    schema = Class.new do
+      def self.name; 'Schema'; end
+      include ArSerializer::Serializable
+      serializer_field :optional1, type: :string, params_type: { optional1?: :int } do end
+      serializer_field :optional2, type: :string, params_type: { optional2: [:string, nil] } do end
+      serializer_field :nestedfield, type: [{ a: [:int] }, { b: [:number, :string] }], params_type: { x: :int, y: [:string] } do end
+      serializer_field :tsfield, type: ArSerializer::TSType.new('A<B>'), params_type: ArSerializer::TSType.new('C<D>') do end
+      serializer_field :mixedfield, type: { x: ArSerializer::TSType.new('E<F>'), y: :string }, params_type: { a: :int, b: ArSerializer::TSType.new('G<H>') } do end
+    end
+    ts = ArSerializer::TypeScript.generate_type_definition schema
+    assert_includes ts, 'nestedfield: ({ a: (number []) } | { b: (number | string) })'
+    assert_includes ts, 'tsfield: A<B>'
+    assert_includes ts, 'mixedfield: { x: E<F>; y: string }'
+    assert_includes ts, 'params: { x: number; y: (string []) }'
+    assert_includes ts, 'params: C<D>'
+    assert_includes ts, 'params: { a: number; b: G<H> }'
+
+    assert_includes ts, 'params?: { optional1?: number }'
+    assert_includes ts, 'params?: { optional2: (string | null) }'
+  end
+
+  def test_only_except_ts_type
+    user_class = Class.new do
+      def self.name; 'User'; end
+      include ArSerializer::Serializable
+      serializer_field :id, type: :int
+      serializer_field :name, type: :string
+      serializer_field :age, type: :int
+      serializer_field :email, type: :string
+    end
+
+    schema = Class.new do
+      def self.name; 'Schema'; end
+      include ArSerializer::Serializable
+      serializer_field :user1, type: user_class, only: [:id, :name]
+      serializer_field :user2, type: user_class, except: [:name]
+      serializer_field :user3, type: [user_class, nil], only: [:name, :age]
+      serializer_field :user4, type: [user_class, nil], except: [:age]
+      serializer_field :users1, type: [user_class], only: [:age, :email]
+      serializer_field :users2, type: [user_class], except: [:email]
+    end
+
+    ts = ArSerializer::TypeScript.generate_type_definition schema
+
+    assert_includes ts, 'user1: TypeUserOnlyIdName'
+    assert_includes ts, 'user2: TypeUserExceptName'
+    assert_includes ts, 'user3: (TypeUserOnlyNameAge | null)'
+    assert_includes ts, 'user4: (TypeUserExceptAge | null)'
+    assert_includes ts, 'users1: (TypeUserOnlyAgeEmail [])'
+    assert_includes ts, 'users2: (TypeUserExceptEmail [])'
+    assert_match /TypeUserExceptName \{\s+id: number\s+age: number\s+email: string\s+_meta\?/, ts
+    assert_match /TypeUserExceptAge \{\s+id: number\s+name: string\s+email: string\s+_meta\?/, ts
+    assert_match /TypeUserExceptEmail \{\s+id: number\s+name: string\s+age: number\s+_meta\?/, ts
+    assert_match /TypeUserOnlyIdName \{\s+id: number\s+name: string\s+_meta\?/, ts
+    assert_match /TypeUserOnlyNameAge \{\s+name: string\s+age: number\s+_meta\?/, ts
+    assert_match /TypeUserOnlyAgeEmail \{\s+age: number\s+email: string\s+_meta\?/, ts
   end
 
   def test_graphql_query_parse
