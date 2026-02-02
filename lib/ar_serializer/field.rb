@@ -4,7 +4,25 @@ require 'set'
 
 class ArSerializer::Field
   attr_reader :includes, :preloaders, :data_block, :only, :except, :scoped_access, :order_column, :permission, :fallback
-  def initialize klass, name, includes: nil, preloaders: [], data_block:, only: nil, except: nil, private: false, scoped_access: nil, permission: nil, fallback: nil, order_column: nil, orderable: nil, type: nil, params_type: nil
+  def initialize(
+    klass,
+    name,
+    includes: nil,
+    preloaders: [],
+    data_block:,
+    only: nil,
+    except: nil,
+    private: false,
+    scoped_access: nil,
+    permission: nil,
+    fallback: nil,
+    order_column: nil,
+    orderable: nil,
+    type: nil,
+    ts_type: nil,
+    params_type: nil,
+    ts_params_type: nil
+  )
     @klass = klass
     @name = name
     @includes = includes
@@ -18,8 +36,8 @@ class ArSerializer::Field
     @data_block = data_block
     @order_column = order_column
     @orderable = orderable
-    @type = type
-    @params_type = params_type
+    @type = ts_type ? ArSerializer::TSType.new(ts_type) : type
+    @params_type = ts_params_type ? ArSerializer::TSType.new(ts_params_type) : params_type
   end
 
   def orderable?
@@ -50,8 +68,8 @@ class ArSerializer::Field
     splat.call type
   end
 
-  def arguments
-    return @params_type.is_a?(Proc) ? @params_type.call : @params_type if @params_type
+  def arguments_type
+    return ArSerializer::GraphQL::TypeClass.from(@params_type.is_a?(Proc) ? @params_type.call : @params_type) if @params_type
     @preloaders.size
     @data_block.parameters
     parameters_list = [@data_block.parameters.drop(@preloaders.size + 1)]
@@ -79,8 +97,8 @@ class ArSerializer::Field
         end
       end
     end
-    return :any if any && arguments.empty?
-    arguments.map do |key, req|
+    return ArSerializer::GraphQL::TypeClass.from(:any) if any && arguments.empty?
+    hash_args = arguments.to_h do |key, req|
       camelcase = key.to_s.camelcase :lower
       type = (
         case key
@@ -94,7 +112,8 @@ class ArSerializer::Field
         end
       )
       [req ? camelcase : "#{camelcase}?", type]
-    end.to_h
+    end
+    ArSerializer::GraphQL::TypeClass.from(hash_args)
   end
 
   def validate_attributes(attributes)
@@ -145,7 +164,26 @@ class ArSerializer::Field
     }[attr_type.type]
   end
 
-  def self.create(klass, name, type: nil, params_type: nil, count_of: nil, includes: nil, preload: nil, only: nil, except: nil, private: nil, scoped_access: nil, permission: nil, fallback: nil, order_column: nil, orderable: nil, &data_block)
+  def self.create(
+    klass,
+    name,
+    ts_type: nil,
+    type: nil,
+    ts_params_type: nil,
+    params_type: nil,
+    count_of: nil,
+    includes: nil,
+    preload: nil,
+    only: nil,
+    except: nil,
+    private: nil,
+    scoped_access: nil,
+    permission: nil,
+    fallback: nil,
+    order_column: nil,
+    orderable: nil,
+    &data_block
+  )
     name = name.to_s
     if count_of
       if includes || preload || data_block || only || except || order_column || orderable || scoped_access != nil || fallback
@@ -153,6 +191,10 @@ class ArSerializer::Field
       end
       return count_field klass, name, count_of, permission: permission
     end
+
+    type = ArSerializer::TSType.new(ts_type) if ts_type
+    params_type = ArSerializer::TSType.new(ts_params_type) if ts_params_type
+
     association = klass.reflect_on_association name.underscore if klass.respond_to? :reflect_on_association
     if association
       if association.collection?

@@ -4,6 +4,8 @@ require 'ar_serializer/field'
 require 'active_record'
 
 module ArSerializer
+  TSType = Data.define(:type)
+
   def self.serialize(model, query, **option)
     Serializer.serialize(model, query, **option)
   end

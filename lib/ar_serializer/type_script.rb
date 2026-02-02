@@ -16,7 +16,7 @@ module ArSerializer::TypeScript
     field_definitions = type.fields.map do |field|
       association_type = field.type.association_type
       query_type = "Type#{association_type.name}Query" if association_type
-      params_type = field.args_ts_type unless field.args.empty?
+      params_type = field.args_ts_type
       params_required = field.args_required?
       attrs = []
       attrs << "query?: #{query_type}" if query_type
