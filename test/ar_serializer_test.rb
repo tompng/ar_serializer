@@ -378,7 +378,7 @@ class ArSerializerTest < Minitest::Test
       ArSerializer.serialize target, query
     end
     error_post_queries.each do |target, query|
-      assert_raises ArSerializer::InvalidQuery, query do
+      assert_raises ArSerializer::InvalidQuery do
         ArSerializer.serialize target, query
       end
     end
