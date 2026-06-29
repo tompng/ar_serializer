@@ -85,6 +85,7 @@ module ArSerializer::Serializer
         raise ArgumentError, "No permission field #{permission} for #{klass}" unless permission_field
       end
       if permission_field
+        ArSerializer.preload_associations models, permission_field.includes if permission_field.includes.present?
         preloadeds = permission_field.preloaders.map do |p|
           preloader_values[[p, nil]] ||= preload.call p, nil
         end
@@ -95,6 +96,7 @@ module ArSerializer::Serializer
 
       defaults = klass._serializer_field_info :defaults
       if defaults
+        ArSerializer.preload_associations models, defaults.includes if defaults.includes.present?
         defaults.preloaders.each do |p|
           preloader_values[[p, nil]] ||= preload.call p, nil
         end
@@ -181,7 +183,7 @@ module ArSerializer::Serializer
       end
 
       if defaults
-        preloadeds = defaults.preloaders.map { |p| preloader_values[[p]] } || []
+        preloadeds = defaults.preloaders.map { |p| preloader_values[[p, nil]] } || []
         models.each do |model|
           data = model.instance_exec(*preloadeds, context, {}, &defaults.data_block)
           output_for_model[model].update data

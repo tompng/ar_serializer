@@ -500,6 +500,20 @@ class ArSerializerTest < Minitest::Test
     assert_raises(ArSerializer::InvalidQuery) { ArSerializer.serialize obj, :defaults }
   end
 
+  def test_defaults_preloader
+    ns = __method__
+    preloader = ->(models) { models.to_h { |m| [m, :preloaded] } }
+    klass = Class.new do
+      include ArSerializer::Serializable
+      serializer_field(:id) { 1 }
+      serializer_defaults(namespace: ns, preload: preloader) do |loaded, _context, _params|
+        { loaded: loaded[self] }
+      end
+    end
+    obj = klass.new
+    assert_equal({ id: 1, loaded: :preloaded }, ArSerializer.serialize(obj, :id, use: ns))
+  end
+
   def test_has_one_permission
     ns = __method__
     User.serializer_permission(namespace: ns) { id.odd? }
@@ -572,6 +586,22 @@ class ArSerializerTest < Minitest::Test
     assert commented_users_count != users.size
     assert_equal [:p2, commented_users_count, :p3, users.uniq.size], users[0][:test]
     assert_equal [1, 1, 1], [p1_count, p2_count, p3_count]
+  end
+
+  def test_permission_includes
+    ns = __method__
+    association_preloaded = true
+    Comment.serializer_permission(namespace: ns, includes: :user) do
+      association_preloaded &&= association(:user).loaded?
+      user.id.odd?
+    end
+    query = { posts: { comments: :id } }
+    result = ArSerializer.serialize User.all, query, use: ns
+    comments = result.flat_map { |u| u[:posts].flat_map { |p| p[:comments] } }
+    assert association_preloaded, 'includes: should eager-load the association before the permission block runs'
+    assert_operator comments.size, :>, 0
+    assert_operator comments.size, :<, Comment.count
+    assert_equal Comment.joins(:user).where('users.id % 2 = 1').count, comments.size
   end
 
   def test_field_permission
