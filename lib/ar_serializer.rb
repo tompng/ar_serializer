@@ -76,8 +76,10 @@ module ArSerializer::Serializable
   end
 end
 
-ActiveRecord::Base.include ArSerializer::Serializable
-ActiveRecord::Relation.include ArSerializer::ArrayLikeSerializable
+ActiveSupport.on_load(:active_record) do
+  include ArSerializer::Serializable
+  ActiveRecord::Relation.include ArSerializer::ArrayLikeSerializable
+end
 
 require 'ar_serializer/graphql'
 require 'ar_serializer/type_script'
